@@ -1,0 +1,65 @@
+# Cac file moi truong va he thong
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# Cac thu muc IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# =========================
+# FRONTEND (Next.js)
+# =========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.swc/
+frontend/coverage/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+# Bo qua file env cua Next.js
+frontend/.env*.local
+
+# =========================
+# BACKEND (Spring Boot)
+# =========================
+backend/target/
+backend/log/
+backend/logs/
+backend/*.log
+backend/*.class
+backend/*.jar
+backend/*.war
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/.springBeans
+# Bo qua cac file build cua Maven
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# =========================
+# DATA PIPELINE (Python)
+# =========================
+pipeline/__pycache__/
+pipeline/*.py[cod]
+pipeline/*$py.class
+pipeline/.pytest_cache/
+pipeline/venv/
+pipeline/env/
+pipeline/.venv/
+pipeline/notebooks/.ipynb_checkpoints/
+# Bo qua cac thu muc chua du lieu de tranh day file JSON nang len Git
+pipeline/data/raw/*
+pipeline/data/processed/*
+pipeline/data/enriched/*
+# Giu lai cau truc thu muc data
+!pipeline/data/raw/.gitkeep
+!pipeline/data/processed/.gitkeep
+!pipeline/data/enriched/.gitkeep
