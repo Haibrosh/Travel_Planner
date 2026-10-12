@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO phản hồi chứa JWT Token trả về cho Frontend sau khi xác thực thành công.
+ * Chức năng: DTO phản hồi chứa JWT Token trả về cho Frontend sau khi xác thực thành công.
  */
 @Data
 @Builder
@@ -16,5 +16,5 @@ public class AuthResponse {
     private String token;
     private String email;
     private String username;
-    private String role;
+    // private String role;
 }

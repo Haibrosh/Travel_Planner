@@ -14,7 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * Xử lý nghiệp vụ Đăng ký tài khoản (băm mật khẩu, sinh username) và Đăng nhập (trả JWT Token).
+ * Chức năng: Xử lý nghiệp vụ Đăng ký tài khoản (băm mật khẩu, sinh username) và Đăng nhập (trả JWT Token).
  */
 @Service
 @RequiredArgsConstructor
@@ -44,7 +44,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .username(username)
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role("ROLE_USER") // Gán quyền mặc định là ROLE_USER
+                // .role("ROLE_USER") // Tạm ẩn gán role
                 .build();
 
         userRepository.save(user);
@@ -56,7 +56,7 @@ public class AuthService {
                 .token(jwtToken)
                 .email(user.getEmail())
                 .username(user.getUsername())
-                .role(user.getRole())
+                // .role("ROLE_USER") // Tạm ẩn role trả về
                 .build();
     }
 
@@ -80,7 +80,7 @@ public class AuthService {
                 .token(jwtToken)
                 .email(user.getEmail())
                 .username(user.getUsername())
-                .role(user.getRole())
+                // .role("ROLE_USER") // Tạm ẩn role trả về
                 .build();
     }
 }

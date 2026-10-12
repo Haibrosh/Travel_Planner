@@ -19,7 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Cấu hình an ninh tổng thể (Security Filter Chain, BCrypt, Stateless Session, Phân quyền).
+ * Chức năng: Cấu hình an ninh tổng thể (Security Filter Chain, BCrypt, Stateless Session, Phân quyền).
  */
 @Configuration
 @EnableWebSecurity
@@ -38,8 +38,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Công khai hoàn toàn các API Auth và API báo lỗi
                 .requestMatchers("/auth/**", "/error").permitAll()
-                // Phân quyền: Chỉ ADMIN mới được vào các endpoint /admin/**
-                .requestMatchers("/admin/**").hasRole("ADMIN")
+                // Tạm thời comment ẩn phân quyền role admin, sau này dùng thì mở lại:
+                // .requestMatchers("/admin/**").hasRole("ADMIN")
                 // Mọi request còn lại đều phải có JWT Token hợp lệ
                 .anyRequest().authenticated()
             )

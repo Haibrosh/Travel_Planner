@@ -10,7 +10,7 @@ import java.util.Collection;
 import java.util.Collections;
 
 /**
- * Lớp chuyển đổi (Adapter) đưa User entity của hệ thống về chuẩn UserDetails của Spring Security.
+ * Chức năng: Lớp chuyển đổi (Adapter) đưa User entity của hệ thống về chuẩn UserDetails của Spring Security.
  */
 @RequiredArgsConstructor
 public class CustomUserDetails implements UserDetails {
@@ -19,7 +19,9 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.singletonList(new SimpleGrantedAuthority(user.getRole()));
+        // Tạm thời cấp quyền ROLE_USER mặc định
+        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
+        // return Collections.singletonList(new SimpleGrantedAuthority(user.getRole())); // Mở lại khi dùng DB role
     }
 
     @Override
