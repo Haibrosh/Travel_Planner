@@ -4,20 +4,28 @@ spring:
   application:
     name: travel-planner-api
 
+  # Cấu hình DataSource kết nối thẳng tới PostgreSQL Aiven thông qua các biến từ file .env
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
     username: ${DB_USER}
     password: ${DB_PASS}
     driver-class-name: org.postgresql.Driver
 
+  # Cấu hình Hibernate JPA
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: update # Tự động cập nhật bảng trong quá trình phát triển
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-        default_schema: app
+        default_schema: app # Schema OLTP theo tài liệu kiến trúc
+        hbm2ddl.create_namespaces: true # Tự động khởi tạo schema app nếu chưa có
 
 server:
   port: 8080
+
+# Cấu hình JWT (Token có hiệu lực trong 7 ngày)
+jwt:
+  secret: ${JWT_SECRET:84518923c5837651a51187493a3848b61c15f91752b5757b32d20b601f2f8118}
+  expiration: 604800000
