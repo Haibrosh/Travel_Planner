@@ -5,8 +5,8 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * Entity đại diện cho bảng 'users' trong database
-
+ * Chức năng: Entity ánh xạ vào bảng 'users' trong schema 'app'.
+ * Quản lý thông tin tài khoản người dùng đăng nhập hệ thống.
  */
 @Entity
 @Table(name = "users", schema = "app")
@@ -30,6 +30,11 @@ public class User {
     @Column(name = "username", nullable = false, length = 100)
     private String username;
 
+    // Tạm thời comment ẩn role theo yêu cầu, sau này cần phân quyền ADMIN thì mở lại
+    // @Column(name = "role", nullable = false, length = 20)
+    // @Builder.Default
+    // private String role = "ROLE_USER";
+
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
@@ -38,6 +43,4 @@ public class User {
 
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
-
 }
-
