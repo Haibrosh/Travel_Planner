@@ -40,7 +40,7 @@ public class Trip {
 
     // Trạng thái chuyến đi: PLANNING, COMPLETED
     @Column(name = "status", nullable = false, length = 50)
-    private String status = "PLANNED";
+    private String status = "PLANNING";
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
