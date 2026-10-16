@@ -93,10 +93,13 @@ CREATE INDEX IF NOT EXISTS idx_expenses_trip_date
 CREATE INDEX IF NOT EXISTS idx_expenses_payer
     ON app.expenses(trip_id, paid_by_user_id);
 
+DROP TRIGGER IF EXISTS trg_expenses_updated_at
+    ON app.expenses;
+
 CREATE TRIGGER trg_expenses_updated_at
     BEFORE UPDATE ON app.expenses
     FOR EACH ROW
-    EXECUTE FUNCTION app.set_updated_at();
+EXECUTE FUNCTION app.set_updated_at();
 
 
 -- 3. EXPENSE SPLITS (Chi tiết chia tiền cho từng thành viên)
