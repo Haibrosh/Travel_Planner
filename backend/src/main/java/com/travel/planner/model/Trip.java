@@ -5,12 +5,19 @@ import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3) - chuyến đi do một user tạo (owner).
+ * Lưu ý: dùng @Getter/@Setter thay vì @Data để tránh toString/hashCode kéo theo quan hệ LAZY
+ * (gây LazyInitializationException hoặc vòng lặp vô hạn).
+ */
 @Entity
 @Table(name = "trips", schema = "app")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"owner", "destination"})
 public class Trip {
 
     @Id
@@ -18,11 +25,13 @@ public class Trip {
     @Column(name = "trip_id")
     private Long tripId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // Chủ chuyến đi: có toàn quyền (xóa trip, mời collaborator)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // Điểm đến (bảng analytics.destinations - chỉ đọc)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "destination_id", nullable = false)
     private Destination destination;
 
@@ -38,14 +47,15 @@ public class Trip {
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
-    // Trạng thái chuyến đi: PLANNING, COMPLETED
+    // Trạng thái chuyến đi, khớp CHECK constraint trong DB: 'PLANNED' hoặc 'COMPLETED'
     @Column(name = "status", nullable = false, length = 50)
+    @Builder.Default
     private String status = "PLANNING";
 
+    // Do DB tự sinh (DEFAULT NOW() + trigger) nên không cho Hibernate ghi
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
-
 }
