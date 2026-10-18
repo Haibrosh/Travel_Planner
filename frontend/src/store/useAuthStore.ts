@@ -1,9 +1,10 @@
 import { create } from 'zustand';
+import type { UserInfo } from '../types/auth';
 
 interface AuthState {
   isAuthenticated: boolean;
-  user: any | null;
-  setAuth: (user: any) => void;
+  user: UserInfo | null;
+  setAuth: (user: UserInfo) => void;
   logout: () => void;
 }
 
