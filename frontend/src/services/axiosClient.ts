@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Khoi tao axios instance voi base URL cua Spring Boot
 const axiosClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -31,10 +31,12 @@ axiosClient.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    if (error.response?.status === 401) {
-      // Neu loi 401 (het han token) thi xoa token hien tai va redirect ve login
+    // Chi redirect ve /login khi 401 neu khong phai dang goi chinh API /auth/login
+    const requestUrl = error.config?.url || '';
+    if (error.response?.status === 401 && !requestUrl.includes('/auth/login')) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('userInfo');
         window.location.href = '/login';
       }
     }
@@ -42,4 +44,4 @@ axiosClient.interceptors.response.use(
   }
 );
 
-export default axiosClient;
+export default axiosClient;

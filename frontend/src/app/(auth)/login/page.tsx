@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/services/auth.service';
@@ -14,7 +14,15 @@ export default function LoginPage() {
     password: '',
   });
   const [error, setError] = useState<string>('');
+  const [registeredSuccess, setRegisteredSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('registered') === 'true') {
+      setRegisteredSuccess(true);
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -25,6 +33,7 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setRegisteredSuccess(false);
 
     try {
       await authService.login(formData);
@@ -46,6 +55,13 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold text-gray-900">✈️ Travel Planner</h1>
         <p className="mt-2 text-gray-500">Chào mừng bạn quay trở lại!</p>
       </div>
+
+      {/* Registration Success Banner */}
+      {registeredSuccess && (
+        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+          Đăng ký tài khoản thành công! Vui lòng đăng nhập.
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
