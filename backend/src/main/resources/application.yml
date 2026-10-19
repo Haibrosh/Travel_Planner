@@ -21,7 +21,7 @@ spring:
   # Cấu hình Hibernate JPA
   jpa:
     hibernate:
-      ddl-auto: validate # Dùng validate khi đã có Flyway quản lý migration
+      ddl-auto: validate # Chỉ kiểm tra cấu hình khớp với các file migration của Tiên, tuyệt đối không tự sửa DB
     show-sql: true
     properties:
       hibernate:
@@ -36,3 +36,15 @@ server:
 jwt:
   secret: ${JWT_SECRET:84518923c5837651a51187493a3848b61c15f91752b5757b32d20b601f2f8118}
   expiration: 604800000
+
+# Cấu hình CORS: danh sách origin FE được phép gọi API (phân tách bằng dấu phẩy)
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# Cấu hình Swagger UI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
