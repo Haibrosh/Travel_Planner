@@ -54,6 +54,8 @@ public class SecurityConfig {
                 // Công khai các API Auth, API báo lỗi và tài liệu Swagger
                 .requestMatchers("/auth/**", "/error").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // Công khai API tra cứu điểm đến / tỉnh thành
+                .requestMatchers("/api/destinations/**").permitAll()
                 // Tạm thời comment ẩn phân quyền role admin, sau này dùng thì mở lại:
                 // .requestMatchers("/admin/**").hasRole("ADMIN")
                 // Mọi request còn lại đều phải có JWT Token hợp lệ
