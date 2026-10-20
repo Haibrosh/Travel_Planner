@@ -17,20 +17,43 @@ public class DestinationService {
 
     @Transactional(readOnly = true)
     public List<DestinationResponse> getAllDestinations() {
-        List<DestinationProjection> projections = destinationRepository.findAllDestinationsWithCentroid();
-
-        return projections.stream()
-                .map(p -> DestinationResponse.builder()
-                        .provinceCode(p.getProvinceCode())
-                        .slug(p.getSlug())
-                        .name(p.getName())
-                        .nameEn(p.getNameEn())
-                        .fullName(p.getFullName())
-                        .areaKm2(p.getAreaKm2())
-                        .centerLat(p.getCenterLat())
-                        .centerLng(p.getCenterLng())
-                        .build())
+        return destinationRepository.findAllDestinationsWithCentroid()
+                .stream()
+                .map(this::mapToResponse)
                 .toList();
     }
-}
 
+    @Transactional(readOnly = true)
+    public DestinationResponse getDestinationBySlug(String slug) {
+        DestinationProjection projection = destinationRepository.findDestinationWithCentroidBySlug(slug)
+                .orElseThrow(
+                        () -> new IllegalArgumentException("Không tìm thấy tỉnh/thành phố với định danh: " + slug));
+
+        return mapToResponse(projection);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DestinationResponse> searchDestinations(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return getAllDestinations();
+        }
+
+        return destinationRepository.searchDestinationsWithCentroid(keyword.trim())
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    private DestinationResponse mapToResponse(DestinationProjection p) {
+        return DestinationResponse.builder()
+                .provinceCode(p.getProvinceCode())
+                .slug(p.getSlug())
+                .name(p.getName())
+                .nameEn(p.getNameEn())
+                .fullName(p.getFullName())
+                .areaKm2(p.getAreaKm2())
+                .centerLat(p.getCenterLat())
+                .centerLng(p.getCenterLng())
+                .build();
+    }
+}
