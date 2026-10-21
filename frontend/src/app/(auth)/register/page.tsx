@@ -47,8 +47,11 @@ export default function RegisterPage() {
     setError('');
 
     try {
-      const { confirmPassword: _, ...registerData } = formData;
-      await authService.register(registerData);
+      await authService.register({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+      });
       // Đăng ký xong → chuyển sang trang login
       router.push('/login?registered=true');
     } catch (err: unknown) {
