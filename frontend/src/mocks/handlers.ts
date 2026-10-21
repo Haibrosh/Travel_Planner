@@ -1,39 +1,36 @@
 import { http, HttpResponse } from 'msw';
-import type { LoginRequest } from '../types/auth';
-
-type MockRegisterBody = { name?: string; email?: string };
+import type { LoginRequest, RegisterRequest } from '@/types/auth';
 
 export const handlers = [
-  http.post('/auth/login', async ({ request }) => {
+  http.post('*/auth/login', async ({ request }) => {
     const body = (await request.json()) as Partial<LoginRequest>;
-    
+
     if (body?.email === 'test@example.com' && body?.password === 'password') {
       return HttpResponse.json({
-        user: {
-          id: '1',
-          name: 'Test User',
-          email: 'test@example.com',
-        },
         token: 'mock-jwt-token',
+        email: 'test@example.com',
+        username: 'testuser',
       });
     }
 
-    return new HttpResponse(null, {
-      status: 401,
-      statusText: 'Unauthorized',
-    });
+    return HttpResponse.json(
+      {
+        status: 401,
+        error: 'Unauthorized',
+        message: 'Email hoặc mật khẩu không chính xác.',
+      },
+      { status: 401 }
+    );
   }),
 
-  http.post('/auth/register', async ({ request }) => {
-    const body = (await request.json()) as MockRegisterBody;
+  http.post('*/auth/register', async ({ request }) => {
+    const body = (await request.json()) as Partial<RegisterRequest>;
 
     return HttpResponse.json({
-      user: {
-        id: '2',
-        name: body?.name || 'New User',
-        email: body?.email || 'new@example.com',
-      },
       token: 'mock-jwt-token-new',
-    }, { status: 201 });
+      email: body?.email || 'new@example.com',
+      username: body?.username || 'newuser',
+    });
   }),
 ];
+

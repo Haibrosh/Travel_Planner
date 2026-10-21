@@ -1,5 +1,6 @@
 package com.travel.planner.security;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,7 +43,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         final String jwt = authHeader.substring(7);
-        final String userEmail = jwtService.extractUsername(jwt);
+        final String userEmail;
+        try {
+            userEmail = jwtService.extractUsername(jwt);
+        } catch (JwtException | IllegalArgumentException e) {
+            // Token hết hạn / sai chữ ký / sai định dạng -> coi như chưa đăng nhập, Spring sẽ trả 401
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Nếu trích xuất được email và request này chưa được authenticate trong context hiện tại
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
