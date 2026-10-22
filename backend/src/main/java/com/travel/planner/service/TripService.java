@@ -7,6 +7,7 @@ import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
 import com.travel.planner.repository.DestinationRepository;
 import com.travel.planner.repository.TripRepository;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -24,6 +25,7 @@ public class TripService {
 
     private final TripRepository tripRepository;
     private final DestinationRepository destinationRepository;
+    private final EntityManager entityManager;
 
     // Hàm đặc biệt: Tạo chuyến đi mới cho user đang đăng nhập.
     // Lưu ý: Trigger 'trg_add_trip_owner_as_member' trong DB (V6) sẽ tự động thêm chủ chuyến đi vào bảng 'app.trip_members' với role 'OWNER'.
@@ -49,7 +51,9 @@ public class TripService {
                 .status("PLANNING")
                 .build();
 
-        Trip savedTrip = tripRepository.save(trip);
+        Trip savedTrip = tripRepository.saveAndFlush(trip);
+        // Đọc lại từ DB để lấy created_at/updated_at do DB tự sinh (nếu không sẽ trả về null)
+        entityManager.refresh(savedTrip);
         return TripResponse.fromEntity(savedTrip);
     }
 
