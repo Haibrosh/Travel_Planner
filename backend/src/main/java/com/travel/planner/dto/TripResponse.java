@@ -18,8 +18,6 @@ public class TripResponse {
     private Long ownerId;
     private String ownerUsername;
     private Long destinationId;
-    private String destinationName;
-    private String destinationSlug;
     private String name;
     private String description;
     private LocalDate startDate;
@@ -34,9 +32,7 @@ public class TripResponse {
                 .tripId(trip.getTripId())
                 .ownerId(trip.getOwner().getUserId())
                 .ownerUsername(trip.getOwner().getUsername())
-                .destinationId(trip.getDestination().getDestinationId())
-                .destinationName(trip.getDestination().getName())
-                .destinationSlug(trip.getDestination().getSlug())
+                .destinationId(trip.getDestinationId())
                 .name(trip.getName())
                 .description(trip.getDescription())
                 .startDate(trip.getStartDate())

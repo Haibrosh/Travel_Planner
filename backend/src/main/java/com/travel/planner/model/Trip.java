@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"owner", "destination"})
+@ToString(exclude = {"owner"})
 public class Trip {
 
     @Id
@@ -30,10 +30,9 @@ public class Trip {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
-    // Điểm đến (bảng analytics.destinations - chỉ đọc)
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "destination_id", nullable = false)
-    private Destination destination;
+    // ID Điểm đến (khóa ngoại trỏ sang analytics.destinations(destination_id) kiểu BIGINT)
+    @Column(name = "destination_id", nullable = false)
+    private Long destinationId;
 
     @Column(name = "name", nullable = false, length = 255)
     private String name;
