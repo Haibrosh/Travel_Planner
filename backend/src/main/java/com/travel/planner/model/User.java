@@ -5,8 +5,8 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * Entity đại diện cho bảng 'users' trong database
-
+ * Chức năng: Entity ánh xạ vào bảng 'users' trong schema 'app'.
+ * Quản lý thông tin tài khoản người dùng đăng nhập hệ thống.
  */
 @Entity
 @Table(name = "users", schema = "app")
@@ -18,23 +18,29 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "user_id")
+    private Long userId;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(nullable = false)
+    @Column(name = "password", nullable = false, length = 255)
     private String password;
 
-    @Column(nullable = false, length = 20)
-    private String role;
+    @Column(name = "username", nullable = false, length = 100)
+    private String username;
 
-    @Column(name = "created_at", updatable = false)
+    // Tạm thời comment ẩn role theo yêu cầu, sau này cần phân quyền ADMIN thì mở lại
+    // @Column(name = "role", nullable = false, length = 20)
+    // @Builder.Default
+    // private String role = "ROLE_USER";
+
+    @Column(name = "avatar_url", columnDefinition = "TEXT")
+    private String avatarUrl;
+
+    @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // JPA tự động gọi để gán thời gian hiện tại vào biến 'createdAt' ngay trước khi lưu bản ghi mới vào DB
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-    }
+    @Column(name = "updated_at", insertable = false, updatable = false)
+    private LocalDateTime updatedAt;
 }

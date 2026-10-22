@@ -4,20 +4,47 @@ spring:
   application:
     name: travel-planner-api
 
+  # Cấu hình DataSource kết nối thẳng tới PostgreSQL Aiven thông qua các biến từ file .env
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
     username: ${DB_USER}
     password: ${DB_PASS}
     driver-class-name: org.postgresql.Driver
 
+  # Cấu hình Flyway từ nhánh main của Tiên
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: "0"
+
+  # Cấu hình Hibernate JPA
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate # Chỉ kiểm tra cấu hình khớp với các file migration của Tiên, tuyệt đối không tự sửa DB
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-        default_schema: app
+        default_schema: app # Schema OLTP theo tài liệu kiến trúc
+        hbm2ddl.create_namespaces: true
 
 server:
   port: 8080
+
+# Cấu hình JWT từ nhánh feature/auth-login (Token có hiệu lực trong 7 ngày)
+jwt:
+  secret: ${JWT_SECRET:84518923c5837651a51187493a3848b61c15f91752b5757b32d20b601f2f8118}
+  expiration: 604800000
+
+# Cấu hình CORS: danh sách origin FE được phép gọi API (phân tách bằng dấu phẩy)
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# Cấu hình Swagger UI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
