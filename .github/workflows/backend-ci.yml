@@ -1,0 +1,48 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  backend:
+    name: Backend (Compile, Package & Docker)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Package with Maven
+        working-directory: ./backend
+        run: mvn clean package -DskipTests
+
+      - name: Test Build Production Docker Image
+        run: docker build -t travel-planner-backend:test ./backend
+
+      - name: Test Build Development Docker Image
+        run: docker build -f ./backend/Dockerfile.dev -t travel-planner-backend-dev:test ./backend
+
+      - name: Validate Docker Compose
+        run: |
+          cp .env.example .env
+          docker compose config
