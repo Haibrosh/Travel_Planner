@@ -5,5 +5,5 @@ export interface Place {
   name: string;
   lat: number;
   lng: number;
-  category: PlaceCategory;
+  category: string;
 }
