@@ -46,7 +46,7 @@ public class Trip {
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
-    // Trạng thái chuyến đi, khớp CHECK constraint trong DB: 'PLANNED' hoặc 'COMPLETED'
+    // Trạng thái chuyến đi, khớp CHECK constraint trong DB (V6): 'PLANNING' hoặc 'COMPLETED'
     @Column(name = "status", nullable = false, length = 50)
     @Builder.Default
     private String status = "PLANNING";
