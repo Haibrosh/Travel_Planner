@@ -1,114 +1,86 @@
 'use client';
 
-import React, { useState } from 'react';
-import { GripVertical, MoreHorizontal, Pencil } from 'lucide-react';
-import { TripActivityPopupMenu } from './TripActivityPopupMenu';
+import React from 'react';
+import { Clock, MapPin } from 'lucide-react';
 
 export interface TripActivityCardProps {
   index: number;
   title: string;
   timeRange: string;
-  tags: string[];
-  note: string;
-  imageUrl: string;
-  onAddTime?: () => void;
-  onAddNote?: () => void;
-  onDelete?: () => void;
+  tags?: string[];
+  note?: string;
+  imageUrl?: string;
+  isSelected?: boolean; // Prop nhận trạng thái active
+  onClick?: () => void;
 }
 
 export const TripActivityCard: React.FC<TripActivityCardProps> = ({
   index,
   title,
   timeRange,
-  tags,
+  tags = [],
   note,
   imageUrl,
-  onAddTime,
-  onAddNote,
-  onDelete,
+  isSelected = false,
+  onClick,
 }) => {
-  const [showMenu, setShowMenu] = useState(false);
-
   return (
-    <div className="relative flex items-center w-full group">
-      
-      {/* 1. Nút 6 chấm (Drag Handle) */}
-      <div className="absolute -left-6 text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing transition-all hidden sm:flex items-center justify-center">
-        <GripVertical className="w-5 h-5" />
-      </div>
-
-      {/* 2. Số thứ tự tròn màu xanh ngọc */}
-      <div className="absolute -left-3.5 top-6 z-20 w-7 h-7 rounded-full bg-[#0D9488] text-white font-extrabold text-xs flex items-center justify-center shadow-md border-2 border-white">
-        {index}
-      </div>
-
-      {/* 3. Khung nội dung chính & Ảnh liền kề */}
-      <div className="w-full bg-white rounded-2xl border border-[#E2E8F0] shadow-xs flex items-stretch justify-between relative hover:shadow-md transition-all">
-        
-        {/* Phần nội dung bên trái */}
-        <div className="flex-1 p-5 pl-7 flex flex-col justify-between space-y-3 min-w-0">
-          
-          {/* Tên địa điểm & Nút 3 chấm kèm Popup */}
-          <div className="flex items-start justify-between gap-2 relative">
-            <h3 className="text-base font-extrabold text-[#0F172A] tracking-tight truncate">
-              {title}
-            </h3>
-            
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowMenu(!showMenu)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-all cursor-pointer flex-shrink-0"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-
-              {/* Popup menu khớp với props mới */}
-              {showMenu && (
-                <TripActivityPopupMenu
-                  onAddTime={onAddTime}
-                  onAddNote={onAddNote}
-                  onDelete={onDelete}
-                  onClose={() => setShowMenu(false)}
-                />
-              )}
-            </div>
+    <div
+      onClick={onClick}
+      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      className={`w-full bg-white rounded-2xl border p-4 shadow-xs flex flex-col gap-3 cursor-pointer transition-all ${
+        isSelected
+          ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/20 shadow-md'
+          : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          {/* Số thứ tự badge */}
+          <div className="w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-extrabold flex items-center justify-center shrink-0 shadow-xs">
+            {index}
           </div>
 
-          {/* Mốc thời gian */}
-          <p className="text-xs font-bold text-[#64748B]">{timeRange}</p>
-
-          {/* Các Tag danh mục */}
-          {tags && tags.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap pt-0.5">
-              {tags.map((tag, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0F766E] text-white text-[11px] font-bold shadow-xs"
-                >
-                  {tag}
-                </span>
-              ))}
+          <div className="flex flex-col gap-1 min-w-0">
+            <h4 className="text-sm font-extrabold text-slate-900 truncate">
+              {title}
+            </h4>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <Clock className="w-3.5 h-3.5 text-teal-600" />
+              <span>{timeRange}</span>
             </div>
-          )}
-
-          {/* Ghi chú cá nhân */}
-          {note && (
-            <p className="text-xs text-[#64748B] font-medium pt-1 flex items-center gap-1.5 truncate">
-              <Pencil className="w-3.5 h-3.5 text-[#64748B] flex-shrink-0" />
-              <span>{note}</span>
-            </p>
-          )}
-
+          </div>
         </div>
 
-        {/* Phần khung ảnh bên phải */}
-        <div className="relative w-[180px] sm:w-[200px] flex-shrink-0 bg-slate-100 rounded-r-2xl overflow-hidden">
-          <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
-        </div>
-
+        {imageUrl && (
+          <img
+            src={imageUrl}
+            alt={title}
+            className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
+          />
+        )}
       </div>
 
+      {/* Tags danh mục */}
+      {tags.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {tags.map((tag, idx) => (
+            <span
+              key={idx}
+              className="text-[10px] font-extrabold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md uppercase tracking-wider"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {note && (
+        <p className="text-xs text-slate-500 font-medium italic border-t border-slate-100 pt-2.5 flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+          <span className="truncate">{note}</span>
+        </p>
+      )}
     </div>
   );
 };

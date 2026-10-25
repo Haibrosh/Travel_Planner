@@ -6,17 +6,25 @@ import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNa
 import { TripDateFilter } from '@/components/trip-workspace/TripDateFilter';
 import { TripActivityCard } from '@/components/cards/TripActivityCard';
 import { AddLocationBar, LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
-import { MapWorkspacePanel } from '@/components/trip-workspace/MapWorkspacePanel';
+import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
 
 import { GroupFundCard } from '@/components/cards/GroupFundCard';
 import { TotalExpenseCard, ExpenseItem } from '@/components/cards/TotalExpenseCard';
 import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
 import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
+import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
+import { useMapStore } from '@/store/useMapStore';
 
 export default function TripWorkspacePage() {
   const [activeTab, setActiveTab] = useState<TripTabType>('timeline');
 
-  // State chung của chuyến đi (dùng cho Header và Tab Cài đặt)
+  // State quản lý Modal Tạo chuyến đi mới
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Lấy state và actions từ useMapStore
+  const { selectedPlace, isModalOpen, openModal } = useMapStore();
+
+  // State chung chuyến đi
   const [tripInfo, setTripInfo] = useState<TripSettingsData>({
     title: 'ĐÀ LẠT MỘNG MƠ',
     location: 'Đà Lạt, Lâm Đồng',
@@ -36,6 +44,11 @@ export default function TripWorkspacePage() {
       category: ['Tham quan'],
       note: 'Thuê xe đạp đôi dạo quanh hồ',
       imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
+      address: 'Phường 1, Thành phố Đà Lạt, Lâm Đồng',
+      rating: 4.6,
+      isVisited: true,
+      top: '40%',
+      left: '45%',
     },
     {
       id: 2,
@@ -44,6 +57,11 @@ export default function TripWorkspacePage() {
       category: ['Tham quan', 'Chụp ảnh'],
       note: 'Chụp ảnh kỷ niệm',
       imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80',
+      address: 'Bà Huyện Thanh Quan, Phường 8, Đà Lạt',
+      rating: 4.4,
+      isVisited: false,
+      top: '25%',
+      left: '60%',
     },
   ]);
 
@@ -55,14 +73,51 @@ export default function TripWorkspacePage() {
     { id: 3, title: 'Vé vào cổng Vườn hoa', amount: 2500000, category: 'Tham quan', paidBy: 'Đức Anh' },
   ]);
 
-  // 3. State Tab Bạn bè (Members)
+  // 3. State Tab Bạn bè
   const [members, setMembers] = useState<MemberItem[]>([
     { id: 1, name: 'Đỗ Trí Viễn', email: 'viento.it@gmail.com', avatarBgColor: 'bg-teal-600', isLeader: true },
     { id: 2, name: 'Bùi Đức Anh', email: 'ducanh.dev@gmail.com', avatarBgColor: 'bg-emerald-700', isLeader: false },
     { id: 3, name: 'Thiều Quốc Đạt', email: 'quocdat.art@gmail.com', avatarBgColor: 'bg-cyan-600', isLeader: false },
   ]);
 
-  // Các hàm xử lý (Handlers)
+  const mapPins: MapPinItem[] = activities.map((act, index) => ({
+    id: act.id,
+    index: index + 1,
+    title: act.title,
+    category: act.category[0] || 'Khám phá',
+    address: act.address,
+    rating: act.rating,
+    imageUrl: act.imageUrl,
+    isVisited: act.isVisited,
+    top: act.top,
+    left: act.left,
+  }));
+
+  const handleSelectActivity = (act: typeof activities[0]) => {
+    openModal({
+      id: act.id,
+      title: act.title,
+      category: act.category[0] || 'Khám phá',
+      address: act.address,
+      rating: act.rating,
+      imageUrl: act.imageUrl,
+      isVisited: act.isVisited,
+    });
+  };
+
+  const handleCreateNewTrip = (formData: NewTripFormData) => {
+    setTripInfo({
+      title: formData.title,
+      location: formData.province, // Cập nhật tỉnh thành vừa chọn vào thông tin chuyến đi
+      startDate: formData.startDate || '2026-11-07',
+      endDate: formData.endDate || '2026-11-10',
+      budget: '5,000,000 đ',
+      isArchived: false,
+      isCompleted: false,
+    });
+    alert(`Đã tạo thành công chuyến đi "${formData.title}" tại ${formData.province}!`);
+  };
+
   const handleAddLocation = (loc: LocationSuggestion) => {
     setActivities([
       ...activities,
@@ -73,6 +128,11 @@ export default function TripWorkspacePage() {
         category: ['Khám phá'],
         note: 'Địa điểm mới',
         imageUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=400&q=80',
+        address: tripInfo.location,
+        rating: 4.5,
+        isVisited: false,
+        top: '60%',
+        left: '50%',
       },
     ]);
   };
@@ -119,21 +179,30 @@ export default function TripWorkspacePage() {
       {/* ================= CỘT TRÁI ================= */}
       <div className="w-full lg:w-[56%] xl:w-[57%] h-screen flex flex-col bg-white border-r border-slate-200">
         
-        {/* Header & Tabs Cố định */}
+        {/* Header & Tabs */}
         <div className="px-6 sm:px-8 pt-6 pb-4 flex flex-col gap-4 bg-white z-10 shrink-0 border-b border-slate-100">
-          <TripHeaderCard
-            title={tripInfo.title}
-            subtitle={tripInfo.location}
-            dateRange="7/11 - 10/11"
-            bannerUrl="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
-          />
+          <div className="flex items-center justify-between">
+            <TripHeaderCard
+              title={tripInfo.title}
+              subtitle={tripInfo.location}
+              dateRange="7/11 - 10/11"
+              bannerUrl="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
+            />
+            {/* Nút test mở Modal tạo chuyến đi mới */}
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="ml-4 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              + Tạo chuyến đi mới
+            </button>
+          </div>
           <TripTabsNav activeTab={activeTab} onChangeTab={setActiveTab} />
         </div>
 
-        {/* Nội dung thay đổi linh hoạt theo Tab đang active */}
+        {/* Nội dung Tab */}
         <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 flex flex-col gap-5 custom-scrollbar">
           
-          {/* TAB 1: LỊCH TRÌNH (TIMELINE) */}
           {activeTab === 'timeline' && (
             <div className="flex flex-col gap-4 animate-in fade-in duration-200">
               <TripDateFilter currentDate="7/11" />
@@ -148,6 +217,8 @@ export default function TripWorkspacePage() {
                     tags={act.category}
                     note={act.note}
                     imageUrl={act.imageUrl}
+                    isSelected={selectedPlace?.id === act.id && isModalOpen}
+                    onClick={() => handleSelectActivity(act)}
                   />
                 ))}
               </div>
@@ -158,18 +229,15 @@ export default function TripWorkspacePage() {
             </div>
           )}
 
-          {/* TAB 2: CHI TIÊU (BUDGET) */}
           {activeTab === 'budget' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-200 pb-8">
               <h2 className="text-lg font-extrabold text-[#0F172A] tracking-tight">
                 CHI TIÊU
               </h2>
-
               <GroupFundCard
                 initialBalance={fundBalance}
                 onSaveBalance={(newVal) => setFundBalance(newVal)}
               />
-
               <TotalExpenseCard
                 expenses={expenses}
                 onAddExpense={handleAddExpense}
@@ -178,7 +246,6 @@ export default function TripWorkspacePage() {
             </div>
           )}
 
-          {/* TAB 3: BẠN BÈ (MEMBERS) */}
           {activeTab === 'members' && (
             <TripMembersPanel
               members={members}
@@ -188,7 +255,6 @@ export default function TripWorkspacePage() {
             />
           )}
 
-          {/* TAB 4: CÀI ĐẶT (SETTINGS) */}
           {activeTab === 'settings' && (
             <TripSettingsPanel
               initialTrip={tripInfo}
@@ -204,9 +270,16 @@ export default function TripWorkspacePage() {
       </div>
 
       {/* ================= CỘT PHẢI (BẢN ĐỒ MAP WORKSPACE) ================= */}
-      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-screen">
-        <MapWorkspacePanel />
+      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-screen relative">
+        <MapWorkspacePanel pins={mapPins} />
       </div>
+
+      {/* Modal Tạo chuyến đi mới */}
+      <CreateTripModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateNewTrip}
+      />
 
     </div>
   );
