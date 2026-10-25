@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type TripTab = 'itinerary' | 'explore' | 'budget' | 'checklist' | 'collab';
+export type TripTab = 'itinerary' | 'budget' | 'checklist' | 'collab';
 
 interface TripUiState {
   activeTab: TripTab;
