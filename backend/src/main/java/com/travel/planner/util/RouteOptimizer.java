@@ -18,7 +18,6 @@ public class RouteOptimizer {
     private static final double EARTH_RADIUS_KM = 6_371.0;
     private static final int MAX_2OPT_ITER = 500;
 
-    /** Simple immutable coordinate (latitude, longitude in decimal degrees). */
     public static final class Coordinate {
         public final double latitude;
         public final double longitude;
@@ -39,13 +38,12 @@ public class RouteOptimizer {
         if (input == null || input.size() <= 1) {
             return input == null ? Collections.emptyList() : new ArrayList<>(input);
         }
-        // 1. Build distance matrix
         double[][] dist = distanceMatrix(input);
-        // 2. Initial tour via nearest‑neighbor (start from first point)
+
         List<Integer> tourIdx = nearestNeighbor(dist);
-        // 3. 2‑opt improvement
+
         twoOpt(dist, tourIdx);
-        // Convert index tour back to coordinates
+
         List<Coordinate> result = new ArrayList<>(tourIdx.size());
         for (int idx : tourIdx) {
             result.add(input.get(idx));
@@ -94,7 +92,7 @@ public class RouteOptimizer {
                     next = i;
                 }
             }
-            if (next == -1) break; // should not happen
+            if (next == -1) break;
             visited[next] = true;
             tour.add(next);
             current = next;
@@ -108,6 +106,23 @@ public class RouteOptimizer {
         boolean improved = true;
         int iter = 0;
         while (improved && iter < MAX_2OPT_ITER) {
+            improved = false;
+
+            for (int i = 0; i < n - 1; i++) {
+                for (int k = i + 2; k < n; k++) {
+                    double delta =
+                        - dist[tour.get(i)][tour.get(i + 1)]
+                        - dist[tour.get(k - 1)][tour.get(k)]
+                        + dist[tour.get(i)][tour.get(k - 1)]
+                        + dist[tour.get(i + 1)][tour.get(k)];
+                    if (delta < -1e-9) {
+                        Collections.reverse(tour.subList(i + 1, k));
+                        improved = true;
+                    }
+                }
+            }
+            iter++;
+        }
             improved = false;
             for (int i = 0; i < n - 1; i++) {
                 for (int k = i + 2; k <= n; k++) {
@@ -129,4 +144,4 @@ public class RouteOptimizer {
             iter++;
         }
     }
-}
+
