@@ -1,6 +1,7 @@
 package com.travel.planner.security;
 
 import com.travel.planner.model.User;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -12,10 +13,16 @@ import java.util.Collections;
 /**
  * Chức năng: Lớp chuyển đổi (Adapter) đưa User entity của hệ thống về chuẩn UserDetails của Spring Security.
  */
+@Getter
 @RequiredArgsConstructor
 public class CustomUserDetails implements UserDetails {
 
     private final User user;
+
+    // Hàm tiện ích lấy nhanh ID của user đang đăng nhập
+    public Long getUserId() {
+        return user.getUserId();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
