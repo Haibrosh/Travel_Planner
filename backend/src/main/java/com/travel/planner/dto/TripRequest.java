@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDate;
 
 /**
- * Chức năng: DTO nhận dữ liệu đầu vào từ Client khi tạo mới chuyến đi (POST /api/v1/trips).
+ * Chức năng: DTO nhận dữ liệu đầu vào khi tạo mới (POST) hoặc cập nhật (PUT) chuyến đi.
  */
 @Data
 public class TripRequest {
