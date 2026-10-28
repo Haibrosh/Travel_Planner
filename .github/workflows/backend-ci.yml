@@ -36,11 +36,28 @@ jobs:
         working-directory: ./backend
         run: mvn clean package -DskipTests
 
-      - name: Test Build Production Docker Image
-        run: docker build -t travel-planner-backend:test ./backend
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Test Build Development Docker Image
-        run: docker build -f ./backend/Dockerfile.dev -t travel-planner-backend-dev:test ./backend
+      - name: Test Build Production Docker Image (với GHA Cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: travel-planner-backend:test
+          cache-from: type=gha,scope=backend-prod
+          cache-to: type=gha,mode=max,scope=backend-prod
+
+      - name: Test Build Development Docker Image (với GHA Cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.dev
+          push: false
+          tags: travel-planner-backend-dev:test
+          cache-from: type=gha,scope=backend-dev
+          cache-to: type=gha,mode=max,scope=backend-dev
 
       - name: Validate Docker Compose
         run: |
