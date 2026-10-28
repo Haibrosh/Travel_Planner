@@ -13,8 +13,9 @@ import java.time.LocalDate;
 @Data
 public class TripRequest {
 
-    @NotNull(message = "ID điểm đến (destinationId) không được để trống")
-    private Long destinationId;
+    @NotBlank(message = "Mã tỉnh/điểm đến (provinceCode) không được để trống")
+    @Size(max = 2, message = "Mã tỉnh gồm tối đa 2 ký tự (chuẩn destinations_v2)")
+    private String provinceCode;
 
     @NotBlank(message = "Tên chuyến đi không được để trống")
     @Size(max = 255, message = "Tên chuyến đi không được vượt quá 255 ký tự")
