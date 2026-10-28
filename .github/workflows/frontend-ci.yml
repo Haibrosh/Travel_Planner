@@ -41,8 +41,25 @@ jobs:
       - name: Build Next.js
         run: npm run build
 
-      - name: Test Build Production Docker Image
-        run: docker build -t travel-planner-frontend:test .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Test Build Development Docker Image
-        run: docker build -f Dockerfile.dev -t travel-planner-frontend-dev:test .
+      - name: Test Build Production Docker Image (với GHA Cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: travel-planner-frontend:test
+          cache-from: type=gha,scope=frontend-prod
+          cache-to: type=gha,mode=max,scope=frontend-prod
+
+      - name: Test Build Development Docker Image (với GHA Cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.dev
+          push: false
+          tags: travel-planner-frontend-dev:test
+          cache-from: type=gha,scope=frontend-dev
+          cache-to: type=gha,mode=max,scope=frontend-dev
