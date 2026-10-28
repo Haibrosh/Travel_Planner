@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Star, MapPin, Check, ExternalLink, Navigation } from 'lucide-react';
+import { X, Star, MapPin, Check, Navigation } from 'lucide-react';
 
 export interface PlaceDetailData {
   id: string | number;

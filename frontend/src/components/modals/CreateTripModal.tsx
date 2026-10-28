@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Camera, MapPin } from 'lucide-react';
+import { X, Camera, MapPin } from 'lucide-react';
 
 export interface NewTripFormData {
   title: string;
