@@ -6,18 +6,21 @@ import com.travel.planner.model.Destination;
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
 import com.travel.planner.repository.DestinationRepository;
+import com.travel.planner.repository.ItineraryItemRepository;
 import com.travel.planner.repository.TripRepository;
+import com.travel.planner.security.TripSecurityService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
- * Chức năng: Xử lý toàn bộ nghiệp vụ CRUD Chuyến đi (Trip) và kiểm tra quyền sở hữu của người dùng hiện tại.
+ * Chức năng: Xử lý các nghiệp vụ quản lý chuyến đi (Tạo, Xem, Cập nhật, Xóa).
  */
 @Service
 @RequiredArgsConstructor
@@ -25,20 +28,15 @@ public class TripService {
 
     private final TripRepository tripRepository;
     private final DestinationRepository destinationRepository;
+    private final ItineraryItemRepository itineraryItemRepository;
+    private final TripSecurityService tripSecurityService;
     private final EntityManager entityManager;
 
-    // Hàm đặc biệt: Tạo chuyến đi mới cho user đang đăng nhập.
-    // Lưu ý: Trigger 'trg_add_trip_owner_as_member' trong DB (V6) sẽ tự động thêm chủ chuyến đi vào bảng 'app.trip_members' với role 'OWNER'.
+    // Tạo chuyến đi mới cho user đang đăng nhập
     @Transactional
     public TripResponse createTrip(TripRequest request, User currentUser) {
-        // Kiểm tra ràng buộc ngày tháng khớp với constraint chk_trips_dates (end_date >= start_date)
-        if (request.getEndDate().isBefore(request.getStartDate())) {
-            throw new IllegalArgumentException("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.");
-        }
-
-        // Kiểm tra điểm đến có tồn tại trong bảng analytics.destinations_v2 không (tránh lỗi FK trả về 500)
-        Destination destination = destinationRepository.findById(request.getProvinceCode())
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy điểm đến với mã tỉnh: " + request.getProvinceCode()));
+        validateDateRange(request.getStartDate(), request.getEndDate());
+        Destination destination = validateAndGetDestination(request.getProvinceCode());
 
         Trip trip = Trip.builder()
                 .owner(currentUser)
@@ -51,12 +49,11 @@ public class TripService {
                 .build();
 
         Trip savedTrip = tripRepository.saveAndFlush(trip);
-        // Đọc lại từ DB để lấy created_at/updated_at do DB tự sinh (nếu không sẽ trả về null)
         entityManager.refresh(savedTrip);
         return TripResponse.fromEntity(savedTrip);
     }
 
-    // Hàm đặc biệt: Lấy danh sách các chuyến đi của chính user đang đăng nhập (mới tạo nhất xếp trước)
+    // Lấy danh sách tất cả chuyến đi của user đang đăng nhập
     @Transactional(readOnly = true)
     public List<TripResponse> getMyTrips(User currentUser) {
         return tripRepository.findAllByOwnerIdWithDetails(currentUser.getUserId())
@@ -65,29 +62,66 @@ public class TripService {
                 .toList();
     }
 
-    // Hàm đặc biệt: Xem chi tiết 1 chuyến đi theo ID, có kiểm tra quyền chỉ chủ sở hữu mới được xem
+    // Xem thông tin chi tiết một chuyến đi (chỉ chủ sở hữu mới xem được)
     @Transactional(readOnly = true)
     public TripResponse getTripById(Long tripId, User currentUser) {
-        Trip trip = getTripAndVerifyOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
         return TripResponse.fromEntity(trip);
     }
 
-    // Hàm đặc biệt: Xóa chuyến đi theo ID, chỉ chủ sở hữu mới có quyền xóa
+    // Cập nhật thông tin chuyến đi và tự động điều chỉnh lịch trình nếu thay đổi ngày
+    @Transactional
+    public TripResponse updateTrip(Long tripId, TripRequest request, User currentUser) {
+        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+
+        validateDateRange(request.getStartDate(), request.getEndDate());
+
+        if (!request.getProvinceCode().equals(trip.getDestination().getProvinceCode())) {
+            Destination destination = validateAndGetDestination(request.getProvinceCode());
+            trip.setDestination(destination);
+        }
+
+        boolean datesChanged = !request.getStartDate().equals(trip.getStartDate())
+                || !request.getEndDate().equals(trip.getEndDate());
+
+        trip.setName(request.getName().trim());
+        trip.setDescription(request.getDescription());
+        trip.setStartDate(request.getStartDate());
+        trip.setEndDate(request.getEndDate());
+        tripRepository.saveAndFlush(trip);
+
+        if (datesChanged) {
+            adjustItineraryToDateRange(tripId, request.getStartDate(), request.getEndDate());
+        }
+
+        Trip updated = tripRepository.findByIdWithDetails(tripId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chuyến đi với ID: " + tripId));
+        return TripResponse.fromEntity(updated);
+    }
+
+    // Xóa chuyến đi (chỉ chủ sở hữu mới có quyền xóa)
     @Transactional
     public void deleteTrip(Long tripId, User currentUser) {
-        Trip trip = getTripAndVerifyOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
         tripRepository.delete(trip);
     }
 
-    // Hàm nội bộ: Tìm Trip theo ID và kiểm tra nghiêm ngặt quyền sở hữu (owner_id == currentUser.userId)
-    private Trip getTripAndVerifyOwner(Long tripId, User currentUser) {
-        Trip trip = tripRepository.findByIdWithDetails(tripId)
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chuyến đi với ID: " + tripId));
+    // Tự động chuyển các địa điểm vượt quá số ngày mới về danh sách chưa xếp ngày
+    private void adjustItineraryToDateRange(Long tripId, LocalDate startDate, LocalDate endDate) {
+        int totalDays = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        itineraryItemRepository.unassignItemsExceedingMaxDays(tripId, totalDays);
+    }
 
-        if (!trip.getOwner().getUserId().equals(currentUser.getUserId())) {
-            throw new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác.");
+    // Kiểm tra tính hợp lệ của khoảng thời gian (ngày kết thúc phải >= ngày bắt đầu)
+    private void validateDateRange(LocalDate startDate, LocalDate endDate) {
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.");
         }
+    }
 
-        return trip;
+    // Kiểm tra và lấy thông tin điểm đến theo mã tỉnh
+    private Destination validateAndGetDestination(String provinceCode) {
+        return destinationRepository.findById(provinceCode)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy điểm đến với mã tỉnh: " + provinceCode));
     }
 }
