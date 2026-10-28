@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3) - chuyến đi do một user tạo (owner).
+ * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3, V7) - chuyến đi do một user tạo (owner).
  * Lưu ý: dùng @Getter/@Setter thay vì @Data để tránh toString/hashCode kéo theo quan hệ LAZY
  * (gây LazyInitializationException hoặc vòng lặp vô hạn).
  */
@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@ToString(exclude = {"owner"})
+@ToString(exclude = {"owner", "destination"})
 public class Trip {
 
     @Id
@@ -30,9 +30,10 @@ public class Trip {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
-    // ID Điểm đến (khóa ngoại trỏ sang analytics.destinations(destination_id) kiểu BIGINT)
-    @Column(name = "destination_id", nullable = false)
-    private Long destinationId;
+    // Điểm đến (khóa ngoại trỏ sang analytics.destinations_v2(province_code) kiểu VARCHAR(2))
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "destination_id", referencedColumnName = "province_code", nullable = false)
+    private Destination destination;
 
     @Column(name = "name", nullable = false, length = 255)
     private String name;

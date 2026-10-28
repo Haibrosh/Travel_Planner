@@ -2,8 +2,10 @@ package com.travel.planner.service;
 
 import com.travel.planner.dto.TripRequest;
 import com.travel.planner.dto.TripResponse;
+import com.travel.planner.model.Destination;
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
+import com.travel.planner.repository.DestinationRepository;
 import com.travel.planner.repository.TripRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
@@ -22,6 +24,7 @@ import java.util.List;
 public class TripService {
 
     private final TripRepository tripRepository;
+    private final DestinationRepository destinationRepository;
     private final EntityManager entityManager;
 
     // Hàm đặc biệt: Tạo chuyến đi mới cho user đang đăng nhập.
@@ -33,14 +36,13 @@ public class TripService {
             throw new IllegalArgumentException("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.");
         }
 
-        // Kiểm tra điểm đến có tồn tại trong bảng analytics.destinations không (tránh lỗi FK trả về 500)
-        if (!tripRepository.existsDestinationById(request.getDestinationId())) {
-            throw new EntityNotFoundException("Không tìm thấy điểm đến với ID: " + request.getDestinationId());
-        }
+        // Kiểm tra điểm đến có tồn tại trong bảng analytics.destinations_v2 không (tránh lỗi FK trả về 500)
+        Destination destination = destinationRepository.findById(request.getProvinceCode())
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy điểm đến với mã tỉnh: " + request.getProvinceCode()));
 
         Trip trip = Trip.builder()
                 .owner(currentUser)
-                .destinationId(request.getDestinationId())
+                .destination(destination)
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .startDate(request.getStartDate())
