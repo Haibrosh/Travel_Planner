@@ -1,0 +1,61 @@
+name: travel-planner
+
+services:
+  # ==============================================================================
+  # 1. Backend Service (Spring Boot)
+  # ==============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: travel-planner-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      # Mount code từ máy thật vào container để cập nhật live
+      - ./backend:/app
+      # Target riêng trong container, tránh xung đột file build với IntelliJ trên Windows
+      - /app/target
+      # Cache thư viện Maven giữa các lần chạy, không cần tải lại
+      - maven_repo:/root/.m2
+    # Báo healthy khi Spring Boot đã mở cổng 8080 và sẵn sàng nhận kết nối
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 40s
+
+  # ==============================================================================
+  # 2. Frontend Service (Next.js)
+  # ==============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: travel-planner-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - WATCHPACK_POLLING=true # Giúp Next.js hot reload tức thì trên môi trường Windows / Docker
+    volumes:
+      # Mount code frontend để sửa code ăn ngay (Hot Reload)
+      - ./frontend:/app
+      # Giữ node_modules riêng bên trong container Linux
+      - /app/node_modules
+      # Giữ cache build .next riêng bên trong container
+      - /app/.next
+    depends_on:
+      # Chờ backend hoàn tất khởi động và mở cổng 8080 mới khởi chạy frontend
+      backend:
+        condition: service_healthy
+
+volumes:
+  maven_repo:
+    name: travel_planner_maven_repo

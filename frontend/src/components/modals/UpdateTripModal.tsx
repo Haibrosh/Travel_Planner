@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Image as ImageIcon, Upload } from 'lucide-react';
 
 interface Trip {
@@ -20,34 +20,23 @@ interface UpdateTripModalProps {
   onSave: (updatedTrip: Trip) => void;
 }
 
-export default function UpdateTripModal({ isOpen, onClose, trip, onSave }: UpdateTripModalProps) {
-  const [formData, setFormData] = useState<Trip>({
-    id: '',
-    title: '',
-    location: '',
-    startDate: '',
-    endDate: '',
-    budget: '',
-    coverImage: ''
-  });
+export default function UpdateTripModal(props: UpdateTripModalProps) {
+  if (!props.isOpen) return null;
+  return <UpdateTripModalContent key={props.trip?.id ?? 'empty'} {...props} />;
+}
+
+function UpdateTripModalContent({ onClose, trip, onSave }: UpdateTripModalProps) {
+  const [formData, setFormData] = useState<Trip>(() => ({
+    id: trip?.id ?? '',
+    title: trip?.title || '',
+    location: trip?.location || '',
+    startDate: trip?.startDate || '',
+    endDate: trip?.endDate || '',
+    budget: trip?.budget || '',
+    coverImage: trip?.coverImage || '', // Không gán cứng link ảnh ngoài ý muốn
+  }));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (trip) {
-      setFormData({
-        id: trip.id,
-        title: trip.title || '',
-        location: trip.location || '',
-        startDate: trip.startDate || '',
-        endDate: trip.endDate || '',
-        budget: trip.budget || '',
-        coverImage: trip.coverImage || '' // Không gán cứng link ảnh ngoài ý muốn
-      });
-    }
-  }, [trip]);
-
-  if (!isOpen) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

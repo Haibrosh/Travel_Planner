@@ -1,0 +1,7 @@
+[
+  { "id": "1", "name": "Bãi Sau", "lat": 10.335094669199922, "lng": 107.09130163503517, "category": "beach" },
+  { "id": "2", "name": "Bãi Trước", "lat": 10.343561450189782, "lng": 107.07406144752069, "category": "beach" },
+  { "id": "3", "name": "Tượng Chúa Kitô Vua", "lat": 10.326540365057262, "lng": 107.08451198005811, "category": "landmark" },
+  { "id": "4", "name": "Hải đăng Vũng Tàu", "lat": 10.334217647336999, "lng": 107.07772736841683, "category": "viewpoint" },
+  { "id": "5", "name": "Bạch Dinh", "lat": 10.351077982846828, "lng": 107.06866139540195, "category": "landmark" }
+]

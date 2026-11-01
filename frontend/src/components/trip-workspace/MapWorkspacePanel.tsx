@@ -23,7 +23,7 @@ export interface MapWorkspacePanelProps {
 }
 
 export const MapWorkspacePanel: React.FC<MapWorkspacePanelProps> = ({ pins = [] }) => {
-  const [zoom, setZoom] = useState(14);
+  const [, setZoom] = useState(14);
   const [searchQuery, setSearchQuery] = useState('');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [mapLayer, setMapLayer] = useState<'default' | 'satellite' | 'terrain'>('default');

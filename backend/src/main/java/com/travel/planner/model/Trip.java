@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3) - chuyến đi do một user tạo (owner).
+ * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3, V7) - chuyến đi do một user tạo (owner).
  * Lưu ý: dùng @Getter/@Setter thay vì @Data để tránh toString/hashCode kéo theo quan hệ LAZY
  * (gây LazyInitializationException hoặc vòng lặp vô hạn).
  */
@@ -30,9 +30,9 @@ public class Trip {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
-    // Điểm đến (bảng analytics.destinations - chỉ đọc)
+    // Điểm đến (khóa ngoại trỏ sang analytics.destinations_v2(province_code) kiểu VARCHAR(2))
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "destination_id", nullable = false)
+    @JoinColumn(name = "destination_id", referencedColumnName = "province_code", nullable = false)
     private Destination destination;
 
     @Column(name = "name", nullable = false, length = 255)
@@ -47,7 +47,7 @@ public class Trip {
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
-    // Trạng thái chuyến đi, khớp CHECK constraint trong DB: 'PLANNED' hoặc 'COMPLETED'
+    // Trạng thái chuyến đi, khớp CHECK constraint trong DB (V6): 'PLANNING' hoặc 'COMPLETED'
     @Column(name = "status", nullable = false, length = 50)
     @Builder.Default
     private String status = "PLANNING";

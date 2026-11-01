@@ -1,4 +1,4 @@
-// ===== Request Types =====
+// ===== Request Types (khớp DTO Backend của Hồng) =====
 
 export interface LoginRequest {
   email: string;
@@ -6,32 +6,33 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  fullName: string;
   email: string;
+  username: string;
   password: string;
 }
 
-// ===== Response Types =====
+// ===== Response Types (khớp AuthResponse.java của Hồng) =====
 
 export interface AuthResponse {
-  accessToken: string;
-  refreshToken?: string;
-  tokenType?: string;
-  expiresIn?: number;
-  user: UserInfo;
+  token: string;
+  email: string;
+  username: string;
+  role?: string;
 }
 
 export interface UserInfo {
-  id: string | number;
-  fullName: string;
+  id?: string | number;
+  username: string;
   email: string;
   role?: string;
 }
 
-// ===== API Error Type =====
+// ===== API Error Type (khớp GlobalExceptionHandler.java) =====
 
 export interface ApiError {
+  timestamp?: string;
   status: number;
+  error?: string;
   message: string;
-  errors?: Record<string, string>;
 }
+

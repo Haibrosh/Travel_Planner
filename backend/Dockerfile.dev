@@ -1,0 +1,18 @@
+FROM maven:3.9.8-eclipse-temurin-17-alpine
+WORKDIR /app
+
+# Cài đặt netcat (nc) phục vụ healthcheck
+RUN apk add --no-cache netcat-openbsd
+
+# Copy pom.xml và tải trước các dependency để lưu vào cache layer
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Copy mã nguồn
+COPY src ./src
+
+EXPOSE 8080
+
+# Chạy ứng dụng trực tiếp bằng Maven để hỗ trợ live dev
+CMD ["mvn", "spring-boot:run"]
+

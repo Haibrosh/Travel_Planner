@@ -1,20 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { authService } from '@/services/auth.service';
 import type { LoginRequest } from '@/types/auth';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: '',
   });
   const [error, setError] = useState<string>('');
+  const [hideRegisteredBanner, setHideRegisteredBanner] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const showRegisteredSuccess =
+    searchParams.get('registered') === 'true' && !hideRegisteredBanner;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -25,6 +30,7 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setHideRegisteredBanner(true);
 
     try {
       await authService.login(formData);
@@ -46,6 +52,13 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold text-gray-900">✈️ Travel Planner</h1>
         <p className="mt-2 text-gray-500">Chào mừng bạn quay trở lại!</p>
       </div>
+
+      {/* Registration Success Banner */}
+      {showRegisteredSuccess && (
+        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+          Đăng ký tài khoản thành công! Vui lòng đăng nhập.
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
@@ -126,5 +139,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

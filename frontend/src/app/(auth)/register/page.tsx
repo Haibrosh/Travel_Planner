@@ -14,7 +14,7 @@ export default function RegisterPage() {
   const router = useRouter();
 
   const [formData, setFormData] = useState<RegisterFormData>({
-    fullName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -28,8 +28,8 @@ export default function RegisterPage() {
   };
 
   const validate = (): boolean => {
-    if (formData.password.length < 8) {
-      setError('Mật khẩu phải có ít nhất 8 ký tự.');
+    if (formData.password.length < 6) {
+      setError('Mật khẩu phải từ 6 ký tự trở lên.');
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -47,8 +47,11 @@ export default function RegisterPage() {
     setError('');
 
     try {
-      const { confirmPassword: _, ...registerData } = formData;
-      await authService.register(registerData);
+      await authService.register({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+      });
       // Đăng ký xong → chuyển sang trang login
       router.push('/login?registered=true');
     } catch (err: unknown) {
@@ -79,18 +82,18 @@ export default function RegisterPage() {
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-            Họ và tên
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+            Tên hiển thị (Username)
           </label>
           <input
-            id="fullName"
-            name="fullName"
+            id="username"
+            name="username"
             type="text"
             required
-            autoComplete="name"
-            value={formData.fullName}
+            autoComplete="username"
+            value={formData.username}
             onChange={handleChange}
-            placeholder="Nguyễn Văn A"
+            placeholder="nguyenvana"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
                        placeholder-gray-400 outline-none transition
                        focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
@@ -128,7 +131,7 @@ export default function RegisterPage() {
             autoComplete="new-password"
             value={formData.password}
             onChange={handleChange}
-            placeholder="Ít nhất 8 ký tự"
+            placeholder="Ít nhất 6 ký tự"
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
                        placeholder-gray-400 outline-none transition
                        focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"

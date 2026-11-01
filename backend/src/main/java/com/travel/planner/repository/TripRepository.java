@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Chức năng: Truy vấn bảng 'app.trips'.
@@ -16,6 +17,30 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 
     // Các trip do user làm chủ, mới nhất trước
     List<Trip> findByOwner_UserIdOrderByStartDateDesc(Long ownerId);
+
+    // Hàm đặc biệt: Lấy danh sách trip của chủ sở hữu kèm thông tin Owner và Destination (tránh lỗi Lazy Loading & N+1 query)
+    @Query("""
+            SELECT t FROM Trip t
+            JOIN FETCH t.owner
+            JOIN FETCH t.destination
+            WHERE t.owner.userId = :ownerId
+            ORDER BY t.createdAt DESC
+            """)
+    List<Trip> findAllByOwnerIdWithDetails(@Param("ownerId") Long ownerId);
+
+    // Hàm đặc biệt: Lấy chi tiết 1 trip theo ID kèm thông tin Owner và Destination
+    @Query("""
+            SELECT t FROM Trip t
+            JOIN FETCH t.owner
+            JOIN FETCH t.destination
+            WHERE t.tripId = :tripId
+            """)
+    Optional<Trip> findByIdWithDetails(@Param("tripId") Long tripId);
+
+    // Hàm đặc biệt: Kiểm tra province_code có tồn tại trong bảng analytics.destinations_v2 không
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM analytics.destinations_v2 WHERE province_code = :provinceCode)",
+            nativeQuery = true)
+    boolean existsDestinationByProvinceCode(@Param("provinceCode") String provinceCode);
 
     // Lấy tất cả trip user có quyền truy cập (là owner HOẶC là member đang ACTIVE trong trip_members)
     @Query("""
