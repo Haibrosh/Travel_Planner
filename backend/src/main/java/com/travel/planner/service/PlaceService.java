@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,54 +38,55 @@ public class PlaceService {
         String cleanDestinationId = (destinationId != null && !destinationId.trim().isEmpty()) ? destinationId.trim() : null;
         String cleanCategory = (category != null && !category.trim().isEmpty()) ? category.trim() : null;
 
-        // Xử lý sắp xếp (ưu tiên sort=rating_desc hoặc name_asc)
-        Sort sort = resolveSort(sortParam, pageable);
+        // Xử lý sắp xếp (chuẩn hóa sort keyword để query trong database)
+        String cleanSort = resolveSortParam(sortParam, pageable);
 
         int page = pageable != null ? pageable.getPageNumber() : 0;
         int size = (pageable != null && pageable.getPageSize() > 0) ? pageable.getPageSize() : 20;
-        Pageable finalPageable = PageRequest.of(page, size, sort);
+        Pageable finalPageable = PageRequest.of(page, size);
 
         Page<Place> placePage = placeRepository.searchPlaces(
                 cleanKeyword,
                 cleanDestinationId,
                 cleanCategory,
+                cleanSort,
                 finalPageable
         );
 
         return placePage.map(this::mapToResponse);
     }
 
-    private Sort resolveSort(String sortParam, Pageable pageable) {
+    private String resolveSortParam(String sortParam, Pageable pageable) {
         if (sortParam != null && !sortParam.trim().isEmpty()) {
             String s = sortParam.trim().toLowerCase();
             if ("name_asc".equals(s) || "name,asc".equals(s)) {
-                return Sort.by(Sort.Order.asc("name").nullsLast(), Sort.Order.asc("place_id"));
+                return "name_asc";
             }
             if ("name_desc".equals(s) || "name,desc".equals(s)) {
-                return Sort.by(Sort.Order.desc("name").nullsLast(), Sort.Order.asc("place_id"));
+                return "name_desc";
             }
             if ("rating_asc".equals(s) || "rating,asc".equals(s)) {
-                return Sort.by(Sort.Order.asc("rating").nullsLast(), Sort.Order.asc("place_id"));
+                return "rating_asc";
             }
             if ("rating_desc".equals(s) || "rating,desc".equals(s)) {
-                return Sort.by(
-                        Sort.Order.desc("rating").nullsLast(),
-                        Sort.Order.desc("review_count").nullsLast(),
-                        Sort.Order.asc("place_id")
-                );
+                return "rating_desc";
             }
         }
 
         if (pageable != null && pageable.getSort().isSorted()) {
-            return pageable.getSort();
+            var order = pageable.getSort().iterator().next();
+            String prop = order.getProperty().toLowerCase();
+            boolean isAsc = order.isAscending();
+            if (prop.contains("name")) {
+                return isAsc ? "name_asc" : "name_desc";
+            }
+            if (prop.contains("rating")) {
+                return isAsc ? "rating_asc" : "rating_desc";
+            }
         }
 
         // Mặc định: rating_desc (Điểm đánh giá cao nhất lên đầu)
-        return Sort.by(
-                Sort.Order.desc("rating").nullsLast(),
-                Sort.Order.desc("review_count").nullsLast(),
-                Sort.Order.asc("place_id")
-        );
+        return "rating_desc";
     }
 
     private PlaceDetailResponse mapToResponse(Place place) {

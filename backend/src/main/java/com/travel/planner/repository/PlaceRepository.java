@@ -21,6 +21,13 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
             ))
             AND (CAST(:destinationId AS text) IS NULL OR p.province_code = CAST(:destinationId AS text) OR d.slug = CAST(:destinationId AS text))
             AND (CAST(:category AS text) IS NULL OR p.category = CAST(:category AS text))
+            ORDER BY
+                CASE WHEN CAST(:sort AS text) = 'name_asc' THEN p.name END ASC,
+                CASE WHEN CAST(:sort AS text) = 'name_desc' THEN p.name END DESC,
+                CASE WHEN CAST(:sort AS text) = 'rating_asc' THEN p.rating END ASC NULLS LAST,
+                CASE WHEN CAST(:sort AS text) = 'rating_desc' OR CAST(:sort AS text) IS NULL OR CAST(:sort AS text) = '' THEN p.rating END DESC NULLS LAST,
+                CASE WHEN CAST(:sort AS text) = 'rating_desc' OR CAST(:sort AS text) IS NULL OR CAST(:sort AS text) = '' THEN p.review_count END DESC NULLS LAST,
+                p.place_id ASC
             """,
             countQuery = """
             SELECT COUNT(p.place_id)
@@ -38,6 +45,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
             @Param("keyword") String keyword,
             @Param("destinationId") String destinationId,
             @Param("category") String category,
+            @Param("sort") String sort,
             Pageable pageable
     );
 }
