@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tripService } from '@/services/trip.service';
-import type { CreateTripRequest, TripResponse } from '@/types/trip';
+import type { CreateTripRequest, TripResponse, UpdateTripRequest } from '@/types/trip';
 
 export const TRIP_KEYS = {
   all: ['trips'] as const,
@@ -42,7 +42,24 @@ export function useCreateTrip() {
   });
 }
 
-// Hook xóa chuyến đi
+// Hook cập nhật thông tin chuyến đi (PUT /api/v1/trips/{id})
+export function useUpdateTrip() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    TripResponse,
+    Error,
+    { tripId: number | string; data: UpdateTripRequest }
+  >({
+    mutationFn: ({ tripId, data }) => tripService.updateTrip(tripId, data),
+    onSuccess: (updatedTrip) => {
+      queryClient.invalidateQueries({ queryKey: TRIP_KEYS.lists() });
+      queryClient.setQueryData(TRIP_KEYS.detail(updatedTrip.tripId), updatedTrip);
+    },
+  });
+}
+
+// Hook xóa chuyến đi (DELETE /api/v1/trips/{id})
 export function useDeleteTrip() {
   const queryClient = useQueryClient();
 

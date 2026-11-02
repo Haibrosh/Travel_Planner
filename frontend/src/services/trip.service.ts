@@ -1,5 +1,5 @@
 import axiosClient from './axiosClient';
-import type { CreateTripRequest, TripResponse } from '@/types/trip';
+import type { CreateTripRequest, TripResponse, UpdateTripRequest } from '@/types/trip';
 
 export const tripService = {
   // Lấy danh sách chuyến đi của user hiện tại (GET /api/v1/trips)
@@ -17,6 +17,15 @@ export const tripService = {
   // Tạo chuyến đi mới (POST /api/v1/trips)
   createTrip: async (data: CreateTripRequest): Promise<TripResponse> => {
     const response = await axiosClient.post<TripResponse>('/api/v1/trips', data);
+    return response as unknown as TripResponse;
+  },
+
+  // Cập nhật thông tin chuyến đi (PUT /api/v1/trips/{id})
+  updateTrip: async (
+    tripId: number | string,
+    data: UpdateTripRequest
+  ): Promise<TripResponse> => {
+    const response = await axiosClient.put<TripResponse>(`/api/v1/trips/${tripId}`, data);
     return response as unknown as TripResponse;
   },
 

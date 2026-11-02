@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Bell } from 'lucide-react';
-import { useAuthStore } from '@/store/useAuthStore'; 
+import { useAuthStore } from '@/store/useAuthStore';
 
 export type NavTabType = 'trips' | 'explore';
 
@@ -22,10 +22,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogoClick,
 }) => {
   // Lấy thông tin user trực tiếp từ store/database, nếu chưa có dùng fallback dữ liệu chuẩn
-  const authUser = useAuthStore((state: any) => state?.user);
-  const userName = authUser?.name || 'User';
-  const userAvatarBg = authUser?.avatarBg || '#0D9488';
-  const userInitial = authUser?.avatarInitial || userName.charAt(0).toUpperCase();
+  const authUser = useAuthStore((state) => state.user);
+  const userName = authUser?.username || 'User';
+  const userAvatarBg = '#0D9488';
+  const userInitial = userName.charAt(0).toUpperCase();
 
   return (
     <header
@@ -33,7 +33,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       className="w-full bg-white border-b border-slate-200/80 sticky top-0 z-50 select-none"
     >
       <div className="relative w-full max-w-[1440px] h-[76px] mx-auto px-6 sm:px-12 flex items-center justify-between">
-        
         {/* Cụm 1: Logo & Tên TravelSync */}
         <div
           onClick={onLogoClick}
@@ -129,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Cụm 3: Chuông thông báo & Profile (Đã bỏ hiệu ứng phình to hover scale trên avatar) */}
+        {/* Cụm 3: Chuông thông báo & Profile */}
         <div className="flex items-center gap-4 sm:gap-6 z-10">
           <button
             type="button"
@@ -155,7 +154,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
         </div>
-
       </div>
     </header>
   );
