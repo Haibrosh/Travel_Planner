@@ -12,6 +12,7 @@ export interface TripActivityCardProps {
   imageUrl?: string;
   isSelected?: boolean; // Prop nhận trạng thái active
   onClick?: () => void;
+  menuSlot?: React.ReactNode; // Nút ⋯ + popup menu do component cha truyền vào
 }
 
 export const TripActivityCard: React.FC<TripActivityCardProps> = ({
@@ -23,6 +24,7 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
   imageUrl,
   isSelected = false,
   onClick,
+  menuSlot,
 }) => {
   return (
     <div
@@ -52,12 +54,18 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
           </div>
         </div>
 
-        {imageUrl && (
-          <img
-            src={imageUrl}
-            alt={title}
-            className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
-          />
+        {/* Cụm bên phải: menu ⋯ (nếu có) + ảnh (nếu có) */}
+        {(menuSlot || imageUrl) && (
+          <div className="flex items-start gap-2 shrink-0">
+            {menuSlot}
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt={title}
+                className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
+              />
+            )}
+          </div>
         )}
       </div>
 
