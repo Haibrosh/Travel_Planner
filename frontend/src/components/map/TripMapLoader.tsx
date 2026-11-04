@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { Place } from "@/types/place";
 
 const TripMap = dynamic(() => import("./TripMap"), {
   ssr: false,
@@ -11,6 +12,10 @@ const TripMap = dynamic(() => import("./TripMap"), {
   ),
 });
 
-export default function TripMapLoader() {
-  return <TripMap />;
+interface TripMapLoaderProps {
+  places?: Place[];
+}
+
+export default function TripMapLoader({ places }: TripMapLoaderProps) {
+  return <TripMap places={places} />;
 }
