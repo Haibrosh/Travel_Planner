@@ -86,7 +86,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
                   {trip.name}
                 </h1>
                 <span className="hidden sm:inline-block rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-                  📍 Điểm đến #{trip.destinationId}
+                  📍 {trip.destinationName || (trip.provinceCode ? `Mã tỉnh #${trip.provinceCode}` : `Điểm đến #${trip.destinationId ?? 1}`)}
                 </span>
               </div>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">

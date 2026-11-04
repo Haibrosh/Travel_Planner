@@ -2,48 +2,43 @@
 
 import React from 'react';
 import { Bell } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export type NavTabType = 'trips' | 'explore';
 
 export interface NavbarProps {
   activeTab?: NavTabType;
   onTabChange?: (tab: NavTabType) => void;
-  user?: {
-    name: string;
-    avatarInitial?: string;
-    avatarBg?: string;
-  };
   onNotificationClick?: () => void;
   onUserClick?: () => void;
   onLogoClick?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  activeTab = 'trips',
+  activeTab = 'explore',
   onTabChange,
-  user = {
-    name: 'User',
-    avatarInitial: 'U',
-    avatarBg: '#0D9488',
-  },
   onNotificationClick,
   onUserClick,
   onLogoClick,
 }) => {
+  // Lấy thông tin user trực tiếp từ store/database, nếu chưa có dùng fallback dữ liệu chuẩn
+  const authUser = useAuthStore((state) => state.user);
+  const userName = authUser?.username || 'User';
+  const userAvatarBg = '#0D9488';
+  const userInitial = userName.charAt(0).toUpperCase();
+
   return (
     <header
       style={{ fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" }}
       className="w-full bg-white border-b border-slate-200/80 sticky top-0 z-50 select-none"
     >
-      {/* Giữ nguyên khung tỉ lệ 1440px theo ý bạn */}
       <div className="relative w-full max-w-[1440px] h-[76px] mx-auto px-6 sm:px-12 flex items-center justify-between">
-        
         {/* Cụm 1: Logo & Tên TravelSync */}
         <div
           onClick={onLogoClick}
-          className="flex items-center gap-3.5 cursor-pointer group z-10"
+          className="flex items-center gap-3.5 cursor-pointer z-10"
         >
-          <div className="w-9 h-9 rounded-[10px] bg-[#14B8A6] flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+          <div className="w-9 h-9 rounded-[10px] bg-[#14B8A6] flex items-center justify-center shadow-xs">
             <svg
               width="20"
               height="20"
@@ -66,7 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </div>
 
-        {/* Cụm 2: Navigation Switcher - Ép font chuẩn xác */}
+        {/* Cụm 2: Navigation Switcher */}
         <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center w-[330px] h-[50px] p-1.5 bg-[#64748B]/[0.06] border border-slate-200 rounded-[14px]">
           {/* Tab: Chuyến đi */}
           <button
@@ -146,20 +141,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div
             onClick={onUserClick}
-            className="flex items-center gap-3 cursor-pointer group"
+            className="flex items-center gap-3 cursor-pointer"
           >
             <div
-              style={{ backgroundColor: user.avatarBg || '#0D9488' }}
-              className="w-[40px] h-[40px] rounded-full border-2 border-white flex items-center justify-center text-[15px] font-extrabold text-white shadow-xs group-hover:scale-105 transition-transform"
+              style={{ backgroundColor: userAvatarBg }}
+              className="w-[40px] h-[40px] rounded-full border-2 border-white flex items-center justify-center text-[15px] font-extrabold text-white shadow-xs"
             >
-              {user.avatarInitial || user.name.charAt(0).toUpperCase()}
+              {userInitial}
             </div>
             <span className="text-[15px] font-bold text-[#0F172A] hidden sm:inline-block">
-              {user.name}
+              {userName}
             </span>
           </div>
         </div>
-
       </div>
     </header>
   );
