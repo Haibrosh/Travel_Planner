@@ -3,79 +3,102 @@ package com.travel.planner.util;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 /**
- * Utility class that provides a very simple travelling‑salesman solver.
- * The algorithm consists of three stages:
- *   1. Compute pairwise Haversine distances.
- *   2. Build an initial tour using the Nearest‑Neighbor heuristic.
- *   3. Improve the tour with a 2‑opt local‑search until no improvement
- *      or a safe iteration limit is reached.
+ * Thuật toán tối ưu thứ tự tham quan:
+ *   1. Haversine – tính khoảng cách Trái Đất giữa hai tọa độ (km).
+ *   2. Nearest Neighbor – tạo tuyến xuất phát hợp lý.
+ *   3. 2-opt – cắt các đoạn chéo nhau bằng cách đảo đoạn con cho tới khi không còn cải thiện.
  */
-public class RouteOptimizer {
+public final class RouteOptimizer {
 
     private static final double EARTH_RADIUS_KM = 6_371.0;
-    private static final int MAX_2OPT_ITER = 500;
+    private static final int MAX_2OPT_ITERATIONS = 500;
+    private static final double EPSILON = 1e-9;
 
-    public static final class Coordinate {
-        public final double latitude;
-        public final double longitude;
-        public Coordinate(double latitude, double longitude) {
-            this.latitude = latitude;
-            this.longitude = longitude;
-        }
-        @Override public boolean equals(Object o) {return o instanceof Coordinate c && Double.compare(c.latitude, latitude)==0 && Double.compare(c.longitude, longitude)==0;}
-        @Override public int hashCode() {return Objects.hash(latitude, longitude);}        
-        @Override public String toString() {return "("+latitude+","+longitude+")";}
+    private RouteOptimizer() {
     }
 
-    /**
-     * Returns a new list representing an optimized tour of the supplied coordinates.
-     * The original list is not mutated.
-     */
+    /** Tọa độ dạng số thập phân (vĩ độ, kinh độ). */
+    public record Coordinate(double latitude, double longitude) {
+    }
+
+    /** Trả về danh sách tọa độ theo thứ tự tuyến đã tối ưu (không thay đổi đầu vào). */
     public static List<Coordinate> optimize(List<Coordinate> input) {
-        if (input == null || input.size() <= 1) {
-            return input == null ? Collections.emptyList() : new ArrayList<>(input);
+        List<Integer> order = optimizeOrder(input);
+        List<Coordinate> tour = new ArrayList<>(order.size());
+        for (int index : order) {
+            tour.add(input.get(index));
+        }
+        return tour;
+    }
+
+    /** Trả về chỉ mục của các điểm đầu vào theo thứ tự tuyến đã tối ưu. */
+    public static List<Integer> optimizeOrder(List<Coordinate> input) {
+        if (input == null || input.size() <= 2) {
+            int size = input == null ? 0 : input.size();
+            List<Integer> order = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                order.add(i);
+            }
+            return order;
         }
         double[][] dist = distanceMatrix(input);
-
-        List<Integer> tourIdx = nearestNeighbor(dist);
-
-        twoOpt(dist, tourIdx);
-
-        List<Coordinate> result = new ArrayList<>(tourIdx.size());
-        for (int idx : tourIdx) {
-            result.add(input.get(idx));
-        }
-        return result;
+        List<Integer> tour = nearestNeighbor(dist);
+        twoOpt(dist, tour);
+        return tour;
     }
 
-    private static double[][] distanceMatrix(List<Coordinate> coords) {
-        int n = coords.size();
-        double[][] mat = new double[n][n];
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j < n; j++) {
-                double d = haversine(coords.get(i), coords.get(j));
-                mat[i][j] = d;
-                mat[j][i] = d;
-            }
+    /** Khoảng cách đường tròn khép kín (có quay về điểm xuất phát), đơn vị km. */
+    public static double totalDistance(List<Coordinate> route) {
+        if (route == null || route.size() < 2) {
+            return 0.0;
         }
-        return mat;
+        double sum = 0.0;
+        for (int i = 0; i < route.size(); i++) {
+            sum += haversine(route.get(i), route.get((i + 1) % route.size()));
+        }
+        return sum;
     }
 
-    static double haversine(Coordinate a, Coordinate b) {
-        double lat1 = Math.toRadians(a.latitude);
-        double lat2 = Math.toRadians(b.latitude);
+    /** Khoảng cách tuyến mở (đi một chiều, không quay về điểm đầu), đơn vị km. */
+    public static double totalPathDistance(List<Coordinate> route) {
+        if (route == null || route.size() < 2) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        for (int i = 0; i < route.size() - 1; i++) {
+            sum += haversine(route.get(i), route.get(i + 1));
+        }
+        return sum;
+    }
+
+    /** Công thức Haversine, kết quả tính theo km. */
+    public static double haversine(Coordinate a, Coordinate b) {
+        double lat1 = Math.toRadians(a.latitude());
+        double lat2 = Math.toRadians(b.latitude());
         double dLat = lat2 - lat1;
-        double dLon = Math.toRadians(b.longitude - a.longitude);
+        double dLon = Math.toRadians(b.longitude() - a.longitude());
         double sinLat = Math.sin(dLat / 2);
         double sinLon = Math.sin(dLon / 2);
         double h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
         return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
     }
 
-    /** Nearest‑neighbor starting from the first vertex (index 0). */
+    private static double[][] distanceMatrix(List<Coordinate> coords) {
+        int n = coords.size();
+        double[][] matrix = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                double d = haversine(coords.get(i), coords.get(j));
+                matrix[i][j] = d;
+                matrix[j][i] = d;
+            }
+        }
+        return matrix;
+    }
+
+    /** Nearest Neighbor bắt đầu từ điểm đầu tiên của danh sách. */
     private static List<Integer> nearestNeighbor(double[][] dist) {
         int n = dist.length;
         List<Integer> tour = new ArrayList<>(n);
@@ -92,7 +115,6 @@ public class RouteOptimizer {
                     next = i;
                 }
             }
-            if (next == -1) break;
             visited[next] = true;
             tour.add(next);
             current = next;
@@ -100,48 +122,30 @@ public class RouteOptimizer {
         return tour;
     }
 
-    /** 2‑opt local search that mutates the index list in‑place. */
+    /**
+     * 2-opt: chọn hai cạnh (i, i+1) và (k-1, k) rồi đảo đoạn i+1..k-1
+     * nếu phép đảo làm tổng quãng đường ngắn hơn.
+     */
     private static void twoOpt(double[][] dist, List<Integer> tour) {
         int n = tour.size();
         boolean improved = true;
-        int iter = 0;
-        while (improved && iter < MAX_2OPT_ITER) {
+        int iteration = 0;
+        while (improved && iteration < MAX_2OPT_ITERATIONS) {
             improved = false;
-
-            for (int i = 0; i < n - 1; i++) {
-                for (int k = i + 2; k < n; k++) {
-                    double delta =
-                        - dist[tour.get(i)][tour.get(i + 1)]
-                        - dist[tour.get(k - 1)][tour.get(k)]
-                        + dist[tour.get(i)][tour.get(k - 1)]
-                        + dist[tour.get(i + 1)][tour.get(k)];
-                    if (delta < -1e-9) {
+            for (int i = 0; i < n - 1 && !improved; i++) {
+                for (int k = i + 2; k <= n && !improved; k++) {
+                    int a = tour.get(i);
+                    int b = tour.get(i + 1);
+                    int c = tour.get((k - 1) % n);
+                    int d = tour.get(k % n);
+                    double gain = dist[a][b] + dist[c][d] - dist[a][c] - dist[b][d];
+                    if (gain > EPSILON) {
                         Collections.reverse(tour.subList(i + 1, k));
                         improved = true;
                     }
                 }
             }
-            iter++;
-        }
-            improved = false;
-            for (int i = 0; i < n - 1; i++) {
-                for (int k = i + 2; k <= n; k++) {
-                    double delta =
-                        - dist[tour.get(i)][tour.get(i + 1)]
-                        - dist[tour.get((k - 1) % n)][tour.get(k % n)]
-                        + dist[tour.get(i)][tour.get((k - 1) % n)]
-                        + dist[tour.get(i + 1)][tour.get(k % n)];
-                    if (delta < -1e-9) {
-                        if (k == n) {
-                            Collections.reverse(tour.subList(i + 1, n));
-                        } else {
-                            Collections.reverse(tour.subList(i + 1, k));
-                        }
-                        improved = true;
-                    }
-                }
-            }
-            iter++;
+            iteration++;
         }
     }
-
+}
