@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { X, Star, MapPin, Check, Navigation } from 'lucide-react';
+import { X, Star, MapPin, Check, Navigation, ExternalLink } from 'lucide-react';
+import { WikiContent } from './ExploreDetailModal';
 
 export interface PlaceDetailData {
   id: string | number;
@@ -11,6 +12,7 @@ export interface PlaceDetailData {
   rating?: number;
   imageUrl?: string;
   isVisited?: boolean;
+  content?: WikiContent | null; // Hỗ trợ hiển thị Wiki từ DB trong popup map workspace
 }
 
 export interface PlaceDetailModalProps {
@@ -29,27 +31,28 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   if (!isOpen || !place) return null;
 
   return (
-    <div 
+    <div
       style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
-      className="absolute bottom-6 right-6 z-30 w-full max-w-[380px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
+      className="absolute bottom-6 right-6 z-30 w-full max-w-[380px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-200 max-h-[85vh] overflow-y-auto custom-scrollbar"
     >
       {/* 1. Header ảnh & Nút đóng */}
-      <div className="relative w-full h-[160px] bg-slate-100">
+      <div className="relative w-full h-[150px] bg-slate-100 shrink-0">
         <img
-          src={place.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80'}
+          src={
+            place.imageUrl ||
+            'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80'
+          }
           alt={place.title}
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-xs flex items-center justify-center text-white transition-colors cursor-pointer"
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-xs flex items-center justify-center text-white transition-colors cursor-pointer"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
         </button>
-
         <div className="absolute bottom-3 left-4 right-4">
           <span className="text-[10px] font-extrabold bg-teal-600 text-white px-2 py-0.5 rounded-md uppercase tracking-wide">
             {place.category}
@@ -62,7 +65,6 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
       {/* 2. Nội dung chi tiết */}
       <div className="p-4 flex flex-col gap-3.5">
-        
         {/* Đánh giá & Địa chỉ */}
         <div className="flex flex-col gap-1.5 text-xs">
           {place.rating && (
@@ -79,7 +81,28 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Nút Đã ghé thăm / Đánh dấu */}
+        {/* PHẦN WIKI CONTENT TỪ DB (Chỉ hiển thị khi content != null) */}
+        {place.content ? (
+          <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
+            <p className="text-slate-600 leading-relaxed">{place.content.summary}</p>
+            <div className="pt-1.5 border-t border-slate-200/60 flex flex-col gap-1 text-[10px] text-slate-400">
+              {place.content.attribution && <span>{place.content.attribution}</span>}
+              {place.content.sourceWikiUrl && (
+                <a
+                  href={place.content.sourceWikiUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-bold text-teal-600 hover:underline"
+                >
+                  <span>Xem bài gốc trên Wiki</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Nút Đánh dấu / Đường đi */}
         <div className="flex items-center justify-between pt-1 border-t border-slate-100">
           <button
             type="button"
@@ -91,9 +114,8 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
             }`}
           >
             <Check className="w-3.5 h-3.5" />
-            <span>{place.isVisited ? 'Đã ghé thăm' : 'Đánh dấu đã ghé'}</span>
+            <span>{place.isVisited ? 'Đã thăm' : 'Đánh dấu'}</span>
           </button>
-
           <a
             href={`https://google.com/maps/search/?q=${encodeURIComponent(place.title)}`}
             target="_blank"
@@ -104,7 +126,6 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
             <span>Chỉ đường</span>
           </a>
         </div>
-
       </div>
     </div>
   );

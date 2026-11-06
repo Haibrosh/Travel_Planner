@@ -7,7 +7,7 @@ import { ExploreFilterBar } from '@/components/explore/ExploreFilterBar';
 import { ExploreCard } from '@/components/cards/ExploreCard';
 import { ExplorePagination } from '@/components/explore/ExplorePagination';
 import { AddToTripModal } from '@/components/modals/AddToTripModal';
-import { PlaceDetailModal, PlaceDetailData } from '@/components/modals/PlaceDetailModal';
+import { ExploreDetailModal } from '@/components/modals/ExploreDetailModal';
 import { EXPLORE_PLACES_MOCK, PROVINCES_LIST, PlaceItem } from '@/mocks/exploreData';
 
 export default function ExplorePage() {
@@ -19,13 +19,13 @@ export default function ExplorePage() {
   const [rawSearchQuery, setRawSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<CategoryType | string>('all');
-  
-  // State phân trang 
+
+  // State phân trang
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 4;
 
-  // State quản lý Modal chi tiết địa điểm
-  const [selectedPlaceDetail, setSelectedPlaceDetail] = useState<PlaceDetailData | null>(null);
+  // State quản lý Modal Chi tiết địa điểm (Sử dụng ExploreDetailModal chuẩn to ở giữa)
+  const [selectedPlaceDetail, setSelectedPlaceDetail] = useState<PlaceItem | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
 
   // State quản lý Modal Thêm vào chuyến đi
@@ -36,13 +36,12 @@ export default function ExplorePage() {
     setIsMounted(true);
   }, []);
 
-  // Debounce 300ms cho ô tìm kiếm
+  // Debounce 300ms cho tìm kiếm
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(rawSearchQuery);
       setCurrentPage(1);
     }, 300);
-
     return () => clearTimeout(timer);
   }, [rawSearchQuery]);
 
@@ -50,11 +49,12 @@ export default function ExplorePage() {
 
   // Lọc danh sách địa điểm
   const filteredPlaces = EXPLORE_PLACES_MOCK.filter((place: PlaceItem) => {
-    const matchProvince = selectedProvince 
+    const matchProvince = selectedProvince
       ? place.province.toLowerCase().includes(selectedProvince.toLowerCase()) || place.address.toLowerCase().includes(selectedProvince.toLowerCase())
       : true;
-    const matchSearch = place.title.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) || 
-                        place.address.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+    const matchSearch =
+      place.title.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      place.address.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
     const matchCategory = activeCategory === 'all' || place.category === activeCategory || place.tags.includes(activeCategory as string);
     return matchProvince && matchSearch && matchCategory;
   });
@@ -70,17 +70,9 @@ export default function ExplorePage() {
     setIsAddToTripOpen(true);
   };
 
-  // Mở modal Chi tiết địa điểm
+  // Mở modal Chi tiết địa điểm (Dùng ExploreDetailModal)
   const handleCardClick = (place: PlaceItem) => {
-    setSelectedPlaceDetail({
-      id: place.id,
-      title: place.title,
-      category: place.tags[0] || 'Khám phá',
-      address: place.address,
-      rating: place.rating || 4.8,
-      imageUrl: place.imageUrl,
-      isVisited: false,
-    });
+    setSelectedPlaceDetail(place);
     setIsDetailOpen(true);
   };
 
@@ -99,7 +91,7 @@ export default function ExplorePage() {
         onTabChange={(tab: NavTabType) => {
           setCurrentNavTab(tab);
           if (tab === 'trips') {
-            window.location.href = '/ui-test';
+            window.location.href = '/my-trips';
           }
         }}
         onNotificationClick={() => alert('Mở thông báo')}
@@ -109,11 +101,10 @@ export default function ExplorePage() {
 
       {/* 2. Container chính */}
       <main className="w-full max-w-[1440px] mx-auto px-6 sm:px-12 pt-10 pb-16 space-y-6">
-        
         {/* Tiêu đề trang */}
         <div className="text-center space-y-2">
           <h1 className="text-[32px] sm:text-[38px] font-extrabold text-[#0F172A] tracking-tight">
-            Khám phá các địa điểm du lịch
+            Khám phá điểm du lịch
           </h1>
         </div>
 
@@ -145,11 +136,11 @@ export default function ExplorePage() {
         {/* Thống kê kết quả */}
         <div className="max-w-[1280px] mx-auto flex items-center justify-between px-1 pt-4">
           <span className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-            Tìm thấy <span className="text-[#14B8A6] font-black">{filteredPlaces.length}</span> địa điểm phù hợp
+            Tìm thấy <span className="text-[#14B8A6] font-black">{filteredPlaces.length}</span> địa điểm
           </span>
         </div>
 
-        {/* Lưới thẻ địa điểm  */}
+        {/* Lưới thẻ khám phá */}
         <div className="max-w-[1280px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
           {currentPlaces.length > 0 ? (
             currentPlaces.map((place: PlaceItem) => (
@@ -166,7 +157,7 @@ export default function ExplorePage() {
             ))
           ) : (
             <div className="col-span-full text-center py-20 bg-white rounded-2xl border border-[#E2E8F0] text-slate-400 text-sm font-medium shadow-xs">
-              Không tìm thấy địa điểm phù hợp với từ khóa hoặc bộ lọc của bạn.
+              Không tìm thấy địa điểm phù hợp
             </div>
           )}
         </div>
@@ -179,20 +170,21 @@ export default function ExplorePage() {
             onPageChange={(page: number) => setCurrentPage(page)}
           />
         </div>
-
       </main>
 
-      {/* 4. Modal Chi tiết Địa điểm */}
-      <PlaceDetailModal
+      {/* 4. Modal Chi tiết địa điểm chuẩn giữa màn hình (ExploreDetailModal) */}
+      <ExploreDetailModal
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
-        place={selectedPlaceDetail}
-        onToggleVisited={(id: string | number) => {
+        title={selectedPlaceDetail?.title || ''}
+        imageUrl={selectedPlaceDetail?.imageUrl || ''}
+        description={selectedPlaceDetail?.description || ''}
+        tags={selectedPlaceDetail?.tags || []}
+        address={selectedPlaceDetail?.address || ''}
+        content={selectedPlaceDetail?.content || null}
+        onAddToTrip={() => {
           if (selectedPlaceDetail) {
-            setSelectedPlaceDetail({
-              ...selectedPlaceDetail,
-              isVisited: !selectedPlaceDetail.isVisited,
-            });
+            handleOpenAddToTrip(selectedPlaceDetail);
           }
         }}
       />
@@ -206,7 +198,7 @@ export default function ExplorePage() {
         }}
         locationTitle={activePlaceForTrip?.title}
         onSave={(trip: string, date: string) => {
-          alert(`Đã thêm "${activePlaceForTrip?.title}" vào chuyến đi "${trip}" (Ngày ${date}) thành công!`);
+          alert(`Thêm "${activePlaceForTrip?.title}" vào chuyến đi "${trip}" (Ngày ${date}) thành công!`);
           handleCloseAllModals();
         }}
       />

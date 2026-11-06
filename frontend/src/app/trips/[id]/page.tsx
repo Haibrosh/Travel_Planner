@@ -1,13 +1,19 @@
 'use client';
 
-import { use, useEffect } from 'react';
+import React, { useState, use } from 'react';
 import Link from 'next/link';
 import { useTrip } from '@/hooks/useTrips';
-import { useTripUiStore, type TripTab } from '@/store/useTripUiStore';
-import ItineraryTab from '@/components/trips/workspace/ItineraryTab';
-import BudgetTab from '@/components/trips/workspace/BudgetTab';
-import ChecklistTab from '@/components/trips/workspace/ChecklistTab';
-import CollabTab from '@/components/trips/workspace/CollabTab';
+import { TripHeaderCard } from '@/components/trip-workspace/TripHeaderCard';
+import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNav';
+import { ItineraryTab, ItineraryItem } from '@/components/trip-workspace/ItineraryTab';
+import { TripBudgetPanel } from '@/components/trip-workspace/TripBudgetPanel';
+import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
+import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
+import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
+import { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
+import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
+import { useMapStore } from '@/store/useMapStore';
+import { ExpenseItem } from '@/components/cards/TotalExpenseCard';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -16,145 +22,226 @@ interface PageProps {
 export default function TripWorkspacePage({ params }: PageProps) {
   const { id } = use(params);
   const { data: trip, isLoading, isError, error } = useTrip(id);
-  const { activeTab, setActiveTab, setSelectedTripId } = useTripUiStore();
 
-  useEffect(() => {
-    if (id) {
-      setSelectedTripId(id);
+  const [activeTab, setActiveTab] = useState<TripTabType>('timeline');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { selectedPlace, isModalOpen, openModal } = useMapStore();
+
+  const [activities, setActivities] = useState<ItineraryItem[]>([
+    {
+      id: 1,
+      title: 'Điểm tham quan trung tâm',
+      timeRange: '8:00 AM - 9:30 AM',
+      category: ['Tham quan'],
+      note: 'Dạo chơi và chụp ảnh kỷ niệm',
+      imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80',
+      address: 'Khu vực trung tâm thành phố',
+      rating: 4.6,
+      isVisited: true,
+      top: '40%',
+      left: '45%',
+    },
+    {
+      id: 2,
+      title: 'Nhà thờ Con Gà',
+      timeRange: '15:30 PM - 17:00 PM',
+      category: ['Khám phá'],
+      note: 'Địa điểm mới thêm',
+      imageUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=400&q=80',
+      address: '15 Trần Phú, Phường 3, Đà Lạt',
+      rating: 4.5,
+      isVisited: false,
+      top: '60%',
+      left: '50%',
+    },
+  ]);
+
+  const [fundBalance, setFundBalance] = useState(10000000);
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([
+    { id: 1, title: 'Thuê xe di chuyển', amount: 150000, category: 'Di chuyển', paidBy: 'Thành viên 1' },
+  ]);
+
+  const [members, setMembers] = useState<MemberItem[]>([
+    { id: 1, name: 'Trưởng nhóm', email: 'leader@example.com', avatarBgColor: 'bg-teal-600', isLeader: true },
+    { id: 2, name: 'Thành viên 1', email: 'member1@example.com', avatarBgColor: 'bg-emerald-700', isLeader: false },
+  ]);
+
+  const formatDateVN = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const [year, month, day] = dateStr.split('-');
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
     }
-  }, [id, setSelectedTripId]);
-
-  const tabs: { key: TripTab; label: string; icon: string }[] = [
-    { key: 'itinerary', label: 'Lịch trình', icon: '📅' },
-    { key: 'budget', label: 'Chi phí', icon: '💰' },
-    { key: 'checklist', label: 'Hành lý', icon: '🧳' },
-    { key: 'collab', label: 'Cộng tác', icon: '👥' },
-  ];
+  };
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full flex-col bg-zinc-50 dark:bg-zinc-950">
-        <div className="h-14 border-b border-zinc-200 bg-white px-6 flex items-center animate-pulse dark:border-zinc-800 dark:bg-zinc-900" />
-        <div className="flex-1 p-8">
-          <div className="h-8 w-64 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse mb-4" />
-          <div className="h-4 w-40 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-        </div>
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm font-bold text-slate-500 animate-pulse">Đang tải không gian chuyến đi...</p>
       </div>
     );
   }
 
   if (isError || !trip) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-950 text-center">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900 max-w-md w-full shadow-xs">
-          <span className="text-3xl mb-3 block">⚠️</span>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-            Không tìm thấy chuyến đi
-          </h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {error?.message || 'Chuyến đi không tồn tại hoặc bạn không có quyền truy cập.'}
-          </p>
+      <div className="flex h-screen flex-col items-center justify-center p-6 bg-slate-50 text-center">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 max-w-md w-full shadow-sm">
+          <h2 className="text-base font-bold text-slate-900">Không tìm thấy chuyến đi</h2>
+          <p className="mt-1 text-xs text-slate-500">{error?.message || 'Đã xảy ra lỗi khi kết nối dữ liệu.'}</p>
           <Link
             href="/my-trips"
-            className="mt-5 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
+            className="mt-5 inline-block rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700"
           >
-            ← Quay lại danh sách chuyến đi
+            Quay lại danh sách chuyến đi
           </Link>
         </div>
       </div>
     );
   }
 
+  const tripInfo: TripSettingsData = {
+    title: trip.name,
+    location: trip.description || 'Chưa có mô tả chuyến đi',
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    budget: '10,000,000 đ',
+    isArchived: trip.status === 'ARCHIVED',
+    isCompleted: trip.status === 'COMPLETED',
+  };
+
+  const formattedDateRange = `${formatDateVN(trip.startDate)} - ${formatDateVN(trip.endDate)}`;
+
+  const mapPins: MapPinItem[] = activities.map((act, index) => ({
+    id: act.id,
+    index: index + 1,
+    title: act.title,
+    category: act.category[0] || 'Khám phá',
+    address: act.address || '',
+    rating: act.rating,
+    imageUrl: act.imageUrl,
+    isVisited: act.isVisited,
+    top: act.top || '50%',
+    left: act.left || '50%',
+  }));
+
+  const handleSelectActivity = (act: ItineraryItem) => {
+    openModal({
+      id: act.id,
+      title: act.title,
+      category: act.category[0] || 'Khám phá',
+      address: act.address,
+      rating: act.rating,
+      imageUrl: act.imageUrl,
+      isVisited: act.isVisited,
+    });
+  };
+
+  const handleAddLocation = (loc: LocationSuggestion) => {
+    setActivities([
+      ...activities,
+      {
+        id: Date.now(),
+        title: loc.name,
+        timeRange: '15:30 PM - 17:00 PM',
+        category: ['Khám phá'],
+        note: 'Địa điểm mới thêm',
+        imageUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=400&q=80',
+        address: loc.address,
+        rating: 4.5,
+        isVisited: false,
+        top: '60%',
+        left: '50%',
+      },
+    ]);
+  };
+
+  const handleCreateNewTrip = (formData: NewTripFormData) => {
+    alert(`Đã tạo thành công chuyến đi "${formData.title}" tại ${formData.province}!`);
+    setIsCreateModalOpen(false);
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
-      {/* Top Navigation & Workspace Header */}
-      <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
-          {/* Left: Back button & Trip info */}
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/my-trips"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              title="Quay lại danh sách"
-            >
-              ←
-            </Link>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                  {trip.name}
-                </h1>
-                <span className="hidden sm:inline-block rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-                  📍 Điểm đến #{trip.destinationId}
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                {trip.startDate} – {trip.endDate} • Tạo bởi @{trip.ownerUsername}
-              </p>
-            </div>
-          </div>
-
-          {/* Center: 4 Tab Switcher */}
-          <div className="hidden md:flex items-center gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-zinc-50'
-                      : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('collab')}
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              Chia sẻ
-            </button>
-          </div>
+    <div className="min-h-screen w-full bg-slate-50 flex overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* CỘT TRÁI */}
+      <div className="w-full lg:w-[56%] xl:w-[57%] h-screen flex flex-col bg-white border-r border-slate-200">
+        <div className="px-6 sm:px-8 pt-6 pb-4 flex flex-col gap-4 bg-white z-10 shrink-0 border-b border-slate-100">
+          <TripHeaderCard
+            title={tripInfo.title}
+            subtitle={tripInfo.location}
+            dateRange={formattedDateRange}
+            bannerUrl="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
+            onBack={() => { window.location.href = '/my-trips'; }}
+          />
+          <TripTabsNav activeTab={activeTab} onChangeTab={setActiveTab} />
         </div>
 
-        {/* Mobile Tab Bar */}
-        <div className="flex md:hidden border-t border-zinc-200 px-2 py-1 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60 overflow-x-auto">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 shrink-0 py-1.5 text-center text-xs font-medium rounded ${
-                  isActive
-                    ? 'font-bold text-zinc-900 border-b-2 border-zinc-900 dark:text-zinc-50 dark:border-zinc-50'
-                    : 'text-zinc-500 dark:text-zinc-400'
-                }`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </header>
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 flex flex-col gap-5 custom-scrollbar">
+          {activeTab === 'timeline' && (
+            <ItineraryTab
+              currentDate={formatDateVN(trip.startDate)}
+              activities={activities}
+              selectedPlaceId={selectedPlace?.id}
+              onSelectActivity={handleSelectActivity}
+              onAddLocation={handleAddLocation}
+              onReorderActivities={(newActs) => setActivities(newActs)}
+              onDeleteActivity={(id: string | number) => {
+                setActivities(activities.filter((item) => item.id !== id));
+              }}
+              onUpdateActivity={(id: string | number, updatedData: { timeRange?: string; note?: string }) => {
+                setActivities(
+                  activities.map((item) =>
+                    item.id === id ? { ...item, ...updatedData } : item
+                  )
+                );
+              }}
+            />
+          )}
 
-      {/* Main Workspace Body */}
-      <main className="flex-1 overflow-y-auto">
-        {activeTab === 'itinerary' && <ItineraryTab trip={trip} />}
-        {activeTab === 'budget' && <BudgetTab trip={trip} />}
-        {activeTab === 'checklist' && <ChecklistTab />}
-        {activeTab === 'collab' && <CollabTab trip={trip} />}
-      </main>
+          {activeTab === 'budget' && (
+            <TripBudgetPanel
+              fundBalance={fundBalance}
+              expenses={expenses}
+              onUpdateBalance={(newVal) => setFundBalance(newVal)}
+              onAddExpense={(newExp) => setExpenses([...expenses, { id: Date.now(), ...newExp }])}
+              onDeleteExpense={(id) => setExpenses(expenses.filter((item) => item.id !== id))}
+            />
+          )}
+
+          {activeTab === 'members' && (
+            <TripMembersPanel
+              members={members}
+              inviteUrl={`http://TravelSync.com/invite/${id}`}
+              onUpdateMember={(memberId, newName, newEmail) =>
+                setMembers(members.map((m) => (m.id === memberId ? { ...m, name: newName, email: newEmail } : m)))
+              }
+              onDeleteMember={(memberId) => setMembers(members.filter((m) => m.id !== memberId))}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <TripSettingsPanel
+              initialTrip={tripInfo}
+              onSaveSettings={() => {}}
+              onToggleArchive={() => {}}
+              onToggleComplete={() => {}}
+              onDeleteTrip={() => {}}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* CỘT PHẢI */}
+      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-screen relative">
+        <MapWorkspacePanel pins={mapPins} />
+      </div>
+
+      <CreateTripModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateNewTrip}
+      />
     </div>
   );
 }
