@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -55,7 +56,10 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**", "/error").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 // Công khai API tra cứu điểm đến / tỉnh thành
-                .requestMatchers("/api/destinations/**").permitAll()
+                // Mở thêm API địa điểm, chỉ cho GET (API chỉ đọc); map cả /api/v1/** (FE đang gọi) và /api/** (tương thích ngược)
+                .requestMatchers(HttpMethod.GET,
+                        "/api/v1/destinations/**", "/api/destinations/**",
+                        "/api/v1/places/**", "/api/places/**").permitAll()
                 // Tạm thời comment ẩn phân quyền role admin, sau này dùng thì mở lại:
                 // .requestMatchers("/admin/**").hasRole("ADMIN")
                 // Mọi request còn lại đều phải có JWT Token hợp lệ
