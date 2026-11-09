@@ -1,0 +1,39 @@
+# ==============================================================================
+# Render Blueprint - Backend Staging (Spring Boot, build từ backend/Dockerfile)
+# Hướng dẫn: backend/STAGING_DEPLOY.md
+# Các biến sync:false sẽ được Render hỏi khi tạo Blueprint (KHÔNG commit secret vào repo).
+# ==============================================================================
+services:
+  - type: web
+    name: travel-planner-backend-staging
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Endpoint public (GET, không cần JWT) có truy vấn DB -> kiểm tra được cả app lẫn kết nối Aiven
+    healthCheckPath: /api/v1/destinations
+    autoDeploy: true
+    # Chỉ build lại khi code backend thay đổi
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: staging
+      # --- Kết nối Aiven PostgreSQL (lấy trong Aiven Console > Service > Overview) ---
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      # --- Bảo mật & CORS ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

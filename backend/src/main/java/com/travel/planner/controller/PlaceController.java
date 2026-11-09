@@ -12,7 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/places")
+// Map song song: FE (explore.service.ts) goi /api/v1/places, giu /api/places de khong vo client cu
+@RequestMapping({"/api/v1/places", "/api/places"})
 @RequiredArgsConstructor
 @Tag(name = "Places", description = "APIs địa điểm du lịch")
 public class PlaceController {

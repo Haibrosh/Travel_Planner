@@ -1,0 +1,26 @@
+# ==============================================================================
+# Profile STAGING (Render) - bật bằng biến môi trường SPRING_PROFILES_ACTIVE=staging
+# Chỉ ghi đè những gì khác với application.yml; DB/JWT/CORS vẫn đọc từ biến môi trường.
+# ==============================================================================
+spring:
+  datasource:
+    # Aiven free tier giới hạn số connection và DB dùng chung cả team -> giữ pool nhỏ
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: 1
+      connection-timeout: 20000
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  # Render đứng sau proxy HTTPS -> tôn trọng header X-Forwarded-* (Swagger sinh URL https đúng)
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN

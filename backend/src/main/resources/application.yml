@@ -18,6 +18,12 @@ spring:
     baseline-on-migrate: true
     baseline-version: "0"
 
+  # Phân trang: FE gửi page=1 cho trang đầu -> bật đánh số từ 1 cho tham số Pageable (?page=1&size=8)
+  data:
+    web:
+      pageable:
+        one-indexed-parameters: true
+
   # Cấu hình Hibernate JPA
   jpa:
     hibernate:
@@ -30,7 +36,7 @@ spring:
         hbm2ddl.create_namespaces: true
 
 server:
-  port: 8080
+  port: ${PORT:8080} # Render/Railway cấp cổng qua biến PORT; local mặc định 8080
 
 # Cấu hình JWT từ nhánh feature/auth-login (Token có hiệu lực trong 7 ngày)
 jwt:
