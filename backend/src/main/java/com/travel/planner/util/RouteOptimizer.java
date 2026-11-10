@@ -130,7 +130,7 @@ public final class RouteOptimizer {
         int n = tour.size();
         boolean improved = true;
         int iteration = 0;
-        while (improved && iteration < MAX_2OPT_ITERATIONS) {
+        while (improved && iteration < MAX_2OPT_ITER) {
             improved = false;
             for (int i = 0; i < n - 1 && !improved; i++) {
                 for (int k = i + 2; k <= n && !improved; k++) {

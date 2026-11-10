@@ -18,6 +18,12 @@ public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, Lo
     // Lấy tất cả địa điểm trong chuyến đi sắp xếp theo ngày và thứ tự vị trí
     List<ItineraryItem> findByTripTripIdOrderByDayNumberAscPositionIndexAsc(Long tripId);
 
+    /**
+     * Find itinerary items for a specific trip and day, ordered by position index.
+     */
+    List<ItineraryItem> findByTripTripIdAndDayNumberOrderByPositionIndexAsc(Long tripId, Integer dayNumber);
+
+
     // Chuyển các địa điểm có ngày vượt quá số ngày của chuyến đi về danh sách chưa xếp ngày (day_number = NULL)
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE ItineraryItem i SET i.dayNumber = NULL WHERE i.trip.tripId = :tripId AND i.dayNumber > :maxDays")
