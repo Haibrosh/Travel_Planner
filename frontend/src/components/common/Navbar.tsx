@@ -33,6 +33,7 @@ export default function Navbar({ onOpenCreateTrip }: NavbarProps) {
 
   const navLinks = [
     { href: '/my-trips', label: 'Chuyến đi của tôi' },
+    { href: '/explore', label: 'Khám phá địa điểm' },
   ];
 
   return (

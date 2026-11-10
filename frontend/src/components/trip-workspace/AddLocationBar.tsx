@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, MapPin, Plus } from 'lucide-react';
+import { normalizeText } from '@/utils/text';
 
 export interface LocationSuggestion {
   id: string;
@@ -11,6 +12,7 @@ export interface LocationSuggestion {
 
 export interface AddLocationBarProps {
   onSelectLocation?: (location: LocationSuggestion) => void;
+  suggestions?: LocationSuggestion[]; // Nguồn gợi ý; không truyền thì dùng dữ liệu mẫu bên dưới
 }
 
 // Dữ liệu mẫu gợi ý địa điểm (Sau này có thể kết nối API tìm kiếm backend)
@@ -21,16 +23,20 @@ const MOCK_SUGGESTIONS: LocationSuggestion[] = [
   { id: '4', name: 'Ga Đà Lạt', address: 'Quang Trung, Phường 10, Đà Lạt' },
 ];
 
-export const AddLocationBar: React.FC<AddLocationBarProps> = ({ onSelectLocation }) => {
+export const AddLocationBar: React.FC<AddLocationBarProps> = ({
+  onSelectLocation,
+  suggestions = MOCK_SUGGESTIONS,
+}) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Lọc danh sách theo từ khóa gõ vào
-  const filteredSuggestions = MOCK_SUGGESTIONS.filter(
+  // Lọc danh sách theo từ khóa gõ vào (không phân biệt dấu)
+  const keyword = normalizeText(query.trim());
+  const filteredSuggestions = suggestions.filter(
     (item) =>
-      item.name.toLowerCase().includes(query.toLowerCase()) ||
-      item.address.toLowerCase().includes(query.toLowerCase())
+      normalizeText(item.name).includes(keyword) ||
+      normalizeText(item.address).includes(keyword)
   );
 
   // Đóng dropdown khi click ra ngoài

@@ -1,16 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { TripResponse } from '@/types/trip';
-import { useDeleteTrip } from '@/hooks/useTrips';
+import { DEFAULT_DESTINATIONS } from '@/mocks/exploreData';
 
 interface TripCardProps {
   trip: TripResponse;
+  onEdit?: (trip: TripResponse) => void;
+  onDelete?: (trip: TripResponse) => void;
 }
 
-export default function TripCard({ trip }: TripCardProps) {
-  const deleteMutation = useDeleteTrip();
-
+export default function TripCard({ trip, onEdit, onDelete }: TripCardProps) {
   // Format dates: DD/MM/YYYY
   const formatDate = (dateStr: string) => {
     try {
@@ -33,24 +34,21 @@ export default function TripCard({ trip }: TripCardProps) {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (confirm(`Bạn có chắc chắn muốn xóa chuyến đi "${trip.name}"?`)) {
-      await deleteMutation.mutateAsync(trip.tripId);
-    }
-  };
+  const destinationLabel =
+    trip.destinationName ||
+    DEFAULT_DESTINATIONS.find((d) => d.provinceCode === trip.provinceCode)?.name ||
+    (trip.provinceCode ? `Mã tỉnh #${trip.provinceCode}` : `Điểm đến #${trip.destinationId ?? 1}`);
 
   return (
     <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-zinc-200 bg-white p-5 transition-all hover:border-zinc-300 hover:shadow-xs dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
       <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          <div className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             <span>📍</span>
-            <span>Điểm đến #{trip.destinationId}</span>
+            <span>{destinationLabel}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
                 trip.status === 'COMPLETED'
@@ -60,18 +58,43 @@ export default function TripCard({ trip }: TripCardProps) {
             >
               {trip.status === 'COMPLETED' ? 'Đã hoàn thành' : 'Đang lên kế hoạch'}
             </span>
-            <button
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="text-zinc-400 hover:text-red-500 transition-colors p-1 rounded"
-              title="Xóa chuyến đi"
-            >
-              🗑️
-            </button>
+
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onEdit(trip);
+                }}
+                className="text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors p-1.5 rounded-lg cursor-pointer"
+                title="Chỉnh sửa chuyến đi"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete(trip);
+                }}
+                className="text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors p-1.5 rounded-lg cursor-pointer"
+                title="Xóa chuyến đi"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        <Link href={`/trips/${trip.tripId}`} className="block mt-3 group-hover:text-zinc-600 dark:group-hover:text-zinc-300">
+        <Link
+          href={`/trips/${trip.tripId}`}
+          className="block mt-3 group-hover:text-zinc-600 dark:group-hover:text-zinc-300"
+        >
           <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50 line-clamp-1">
             {trip.name}
           </h3>

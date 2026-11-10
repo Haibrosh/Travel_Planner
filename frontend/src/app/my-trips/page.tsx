@@ -4,11 +4,27 @@ import { useState } from 'react';
 import Navbar from '@/components/common/Navbar';
 import TripCard from '@/components/trips/TripCard';
 import CreateTripModal from '@/components/trips/CreateTripModal';
-import { useMyTrips } from '@/hooks/useTrips';
+import EditTripModal from '@/components/trips/EditTripModal';
+import DeleteConfirmModal from '@/components/modals/DeleteConfirmModal';
+import { useDeleteTrip, useMyTrips } from '@/hooks/useTrips';
+import type { TripResponse } from '@/types/trip';
 
 export default function MyTripsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingTrip, setEditingTrip] = useState<TripResponse | null>(null);
+  const [deletingTrip, setDeletingTrip] = useState<TripResponse | null>(null);
+
   const { data: trips, isLoading, isError, error, refetch } = useMyTrips();
+  const deleteTripMutation = useDeleteTrip();
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTrip) return;
+    try {
+      await deleteTripMutation.mutateAsync(deletingTrip.tripId);
+    } finally {
+      setDeletingTrip(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col">
@@ -22,13 +38,13 @@ export default function MyTripsPage() {
               Chuyến đi của tôi
             </h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Quản lý và theo dõi các hành trình du lịch của bạn
+              Quản lý, chỉnh sửa và theo dõi các hành trình du lịch của bạn
             </p>
           </div>
 
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-semibold text-white shadow-xs transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-semibold text-white shadow-xs transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 cursor-pointer"
           >
             + Tạo chuyến đi mới
           </button>
@@ -84,7 +100,7 @@ export default function MyTripsPage() {
               </p>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="mt-5 rounded-lg bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                className="mt-5 rounded-lg bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 cursor-pointer"
               >
                 + Bắt đầu tạo chuyến đi
               </button>
@@ -95,16 +111,36 @@ export default function MyTripsPage() {
           {!isLoading && !isError && trips && trips.length > 0 && (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               {trips.map((trip) => (
-                <TripCard key={trip.tripId} trip={trip} />
+                <TripCard
+                  key={trip.tripId}
+                  trip={trip}
+                  onEdit={(target) => setEditingTrip(target)}
+                  onDelete={(target) => setDeletingTrip(target)}
+                />
               ))}
             </div>
           )}
         </div>
       </main>
 
+      {/* Modal Tạo chuyến đi mới (POST /api/v1/trips) */}
       <CreateTripModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      {/* Modal Chỉnh sửa chuyến đi (PUT /api/v1/trips/{id}) */}
+      <EditTripModal
+        isOpen={Boolean(editingTrip)}
+        trip={editingTrip}
+        onClose={() => setEditingTrip(null)}
+      />
+
+      {/* Modal Xác nhận xóa chuyến đi (DELETE /api/v1/trips/{id}) */}
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingTrip)}
+        onClose={() => setDeletingTrip(null)}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

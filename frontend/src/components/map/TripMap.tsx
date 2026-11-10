@@ -1,36 +1,43 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import type { Place } from "@/types/place";
 import { useMapStore } from "@/store/useMapStore";
 import { useMapHoverStore } from "@/store/useMapHoverStore";
+import { useItineraryStore, useSelectedDayItems } from "@/store/useItineraryStore";
+import { getCategoryLabel } from "@/utils/placeCategory";
+
+const DEFAULT_CENTER: L.LatLngTuple = [10.346, 107.084]; // Vũng Tàu
+const DEFAULT_ZOOM = 13;
 
 type MarkerState = "default" | "hover" | "selected";
 
-// Style marker theo Figma: teal, chọn thì đậm hơn và phóng to
+const MARKER_BASE =
+  "flex h-full w-full items-center justify-center rounded-full border-2 border-white text-xs font-extrabold text-white shadow-lg transition-transform";
+
 const MARKER_STYLES: Record<MarkerState, string> = {
-  default: "bg-teal-600",
-  hover: "bg-teal-600 scale-125",
-  selected: "bg-[#0F766E] ring-4 ring-teal-300/60 scale-125",
+  default: `${MARKER_BASE} bg-teal-600`,
+  hover: `${MARKER_BASE} bg-teal-600 scale-110`,
+  selected: `${MARKER_BASE} bg-[#0F766E] ring-4 ring-teal-300/60 scale-110`,
 };
 
 const iconCache = new Map<string, L.DivIcon>();
 
-// Icon hiển thị số thứ tự; cache theo (số, trạng thái) để không tạo icon mới mỗi lần render
 function getMarkerIcon(order: number, state: MarkerState): L.DivIcon {
   const key = `${order}-${state}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
+  const size = state === "selected" ? 36 : 30;
   const icon = L.divIcon({
-    className: "", // bỏ style mặc định (nền trắng) của divIcon
-    html: `<div class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-lg ${MARKER_STYLES[state]}">${order}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
+    className: "",
+    html: `<div class="${MARKER_STYLES[state]}">${order}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
   });
   iconCache.set(key, icon);
   return icon;
@@ -42,69 +49,134 @@ function getMarkerState(isSelected: boolean, isHovered: boolean): MarkerState {
   return "default";
 }
 
-// Tự fitBounds khi tập tọa độ đổi (đổi ngày / thêm / xóa). Đổi thứ tự thì không chạy lại.
-function FitBounds({ places }: { places: Place[] }) {
+// Tự căn khung khi đổi ngày / thêm / xóa địa điểm (đổi thứ tự thì không căn lại)
+function FitBoundsController({ places, dayKey }: { places: Place[]; dayKey: string | null }) {
   const map = useMap();
-
-  // Dùng chuỗi key (đã sort) làm dependency để effect chỉ chạy khi tập tọa độ thay đổi
-  const pointsKey = JSON.stringify(
-    places
-      .map((p): [number, number] => [p.lat, p.lng])
-      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  );
+  const lastFitKey = useRef<string | null>(null);
 
   useEffect(() => {
-    const points = JSON.parse(pointsKey) as [number, number][];
-    if (points.length === 0) return;
-    map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
-  }, [map, pointsKey]);
+    const coordsKey = places
+      .map((p) => `${p.id}:${p.lat},${p.lng}`)
+      .sort()
+      .join("|");
+    const fitKey = `${dayKey ?? ""}|${coordsKey}`;
+    if (lastFitKey.current === fitKey) return;
+    lastFitKey.current = fitKey;
+
+    if (places.length === 0) {
+      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    } else if (places.length === 1) {
+      map.setView([places[0].lat, places[0].lng], 15);
+    } else {
+      const points: L.LatLngTuple[] = places.map((p) => [p.lat, p.lng]);
+      map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
+    }
+  }, [places, dayKey, map]);
 
   return null;
 }
 
-// Store -> bản đồ: chọn thẻ thì mở Popup của marker tương ứng
-function SelectedPopupSync({ markerRefs }: { markerRefs: RefObject<Map<string, L.Marker>> }) {
+// Chọn thẻ -> dịch bản đồ tới marker và tự động mở Popup
+function SelectedMarkerSync({
+  places,
+  selectedId,
+  markerRefs,
+}: {
+  places: Place[];
+  selectedId: string | null;
+  markerRefs: RefObject<Map<string, L.Marker>>;
+}) {
   const map = useMap();
-  const selectedPlaceId = useMapStore((s) => s.selectedPlaceId);
+  const lastPannedId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (selectedPlaceId == null) {
+    if (selectedId == null) {
+      lastPannedId.current = null;
       map.closePopup();
       return;
     }
-    const marker = markerRefs.current.get(String(selectedPlaceId));
-    if (marker && !marker.isPopupOpen()) marker.openPopup();
-  }, [map, markerRefs, selectedPlaceId]);
+
+    const marker = markerRefs.current.get(String(selectedId));
+    if (marker && !marker.isPopupOpen()) {
+      marker.openPopup();
+    }
+
+    if (lastPannedId.current === selectedId) return;
+    const target = places.find((p) => String(p.id) === String(selectedId));
+    if (!target) return;
+    lastPannedId.current = selectedId;
+
+    const latLng = L.latLng(target.lat, target.lng);
+    if (!map.getBounds().pad(-0.1).contains(latLng)) {
+      map.panTo(latLng);
+    }
+  }, [selectedId, places, markerRefs, map]);
 
   return null;
 }
 
 interface TripMapProps {
-  places?: Place[]; // Theo thứ tự hiển thị: marker đánh số 1, 2, 3...
+  places?: Place[];
 }
 
-export default function TripMap({ places = [] }: TripMapProps) {
-  // center/zoom chỉ có tác dụng lúc mount (MapContainer không đổi theo props sau đó)
+export default function TripMap({ places }: TripMapProps) {
   const center = useMapStore((s) => s.center);
   const zoom = useMapStore((s) => s.zoom);
-  const selectedPlaceId = useMapStore((s) => s.selectedPlaceId);
-  const setSelectedPlaceId = useMapStore((s) => s.setSelectedPlaceId);
+  const mapSelectedPlaceId = useMapStore((s) => s.selectedPlaceId);
+  const setMapSelectedPlaceId = useMapStore((s) => s.setSelectedPlaceId);
   const hoveredPlaceId = useMapHoverStore((s) => s.hoveredPlaceId);
+
+  const dayKey = useItineraryStore((s) => s.selectedDayKey);
+  const itinerarySelectedPlaceId = useItineraryStore((s) => s.selectedPlaceId);
+  const setItinerarySelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
+  const itineraryItems = useSelectedDayItems();
+
+  const displayPlaces = useMemo<Place[]>(() => {
+    if (places !== undefined) return places;
+    return itineraryItems.map((i) => i.place);
+  }, [places, itineraryItems]);
+
+  const activeSelectedId =
+    mapSelectedPlaceId != null ? String(mapSelectedPlaceId) : itinerarySelectedPlaceId;
 
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
 
+  const routePositions: L.LatLngTuple[] = displayPlaces.map((p) => [p.lat, p.lng]);
+
+  const handleSelectPlace = (placeId: string | null) => {
+    setMapSelectedPlaceId(placeId);
+    setItinerarySelectedPlaceId(placeId);
+  };
+
   return (
-    <MapContainer center={center} zoom={zoom} scrollWheelZoom className="h-full w-full">
+    <MapContainer
+      center={center ?? DEFAULT_CENTER}
+      zoom={zoom ?? DEFAULT_ZOOM}
+      scrollWheelZoom
+      className="h-full w-full"
+    >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <FitBounds places={places} />
-      <SelectedPopupSync markerRefs={markerRefs} />
 
-      {places.map((place, index) => {
-        const isSelected = selectedPlaceId != null && String(selectedPlaceId) === place.id;
-        const isHovered = hoveredPlaceId != null && String(hoveredPlaceId) === place.id;
+      <FitBoundsController places={displayPlaces} dayKey={dayKey} />
+      <SelectedMarkerSync
+        places={displayPlaces}
+        selectedId={activeSelectedId}
+        markerRefs={markerRefs}
+      />
+
+      {routePositions.length >= 2 && (
+        <Polyline
+          positions={routePositions}
+          pathOptions={{ color: "#14b8a6", weight: 3, opacity: 0.8, dashArray: "6 8" }}
+        />
+      )}
+
+      {displayPlaces.map((place, index) => {
+        const isSelected = activeSelectedId != null && String(activeSelectedId) === String(place.id);
+        const isHovered = hoveredPlaceId != null && String(hoveredPlaceId) === String(place.id);
 
         return (
           <Marker
@@ -113,20 +185,31 @@ export default function TripMap({ places = [] }: TripMapProps) {
             icon={getMarkerIcon(index + 1, getMarkerState(isSelected, isHovered))}
             zIndexOffset={isSelected ? 1000 : isHovered ? 500 : 0}
             ref={(marker) => {
-              if (marker) markerRefs.current.set(place.id, marker);
-              else markerRefs.current.delete(place.id);
+              if (marker) markerRefs.current.set(String(place.id), marker);
+              else markerRefs.current.delete(String(place.id));
             }}
             eventHandlers={{
-              click: () => setSelectedPlaceId(place.id),
-              // Đóng popup (bấm ra ngoài / nút X) thì bỏ chọn, để bấm lại thẻ vẫn mở được popup
+              click: () => handleSelectPlace(place.id),
               popupclose: () => {
-                if (String(useMapStore.getState().selectedPlaceId) === place.id) {
-                  setSelectedPlaceId(null);
+                const currentMapSelected = useMapStore.getState().selectedPlaceId;
+                const currentItinerarySelected = useItineraryStore.getState().selectedPlaceId;
+                if (
+                  String(currentMapSelected) === String(place.id) ||
+                  String(currentItinerarySelected) === String(place.id)
+                ) {
+                  handleSelectPlace(null);
                 }
               },
             }}
           >
-            <Popup>{place.name}</Popup>
+            <Popup>
+              <div className="text-xs">
+                <div className="font-semibold text-slate-900">{place.name}</div>
+                {place.category && (
+                  <div className="text-slate-500">{getCategoryLabel(place.category)}</div>
+                )}
+              </div>
+            </Popup>
           </Marker>
         );
       })}

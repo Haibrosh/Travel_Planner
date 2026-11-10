@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateTrip } from '@/hooks/useTrips';
+import { useDestinations } from '@/hooks/usePlaces';
+import { DEFAULT_DESTINATIONS } from '@/mocks/exploreData';
 import type { TripResponse } from '@/types/trip';
 
 interface CreateTripModalProps {
@@ -11,22 +13,16 @@ interface CreateTripModalProps {
   onCreated?: (trip: TripResponse) => void;
 }
 
-const POPULAR_DESTINATIONS = [
-  { id: 1, name: 'Bà Rịa - Vũng Tàu' },
-  { id: 2, name: 'TP. Hồ Chí Minh' },
-  { id: 3, name: 'Đà Nẵng' },
-  { id: 4, name: 'Hà Nội' },
-  { id: 5, name: 'Kiên Giang (Phú Quốc)' },
-  { id: 6, name: 'Khánh Hòa (Nha Trang)' },
-  { id: 7, name: 'Lâm Đồng (Đà Lạt)' },
-];
-
 export default function CreateTripModal({ isOpen, onClose, onCreated }: CreateTripModalProps) {
   const router = useRouter();
   const createTripMutation = useCreateTrip();
+  const { data: destinations } = useDestinations();
+
+  const destinationOptions =
+    destinations && destinations.length > 0 ? destinations : DEFAULT_DESTINATIONS;
 
   const [name, setName] = useState('');
-  const [destinationId, setDestinationId] = useState<number>(1);
+  const [provinceCode, setProvinceCode] = useState<string>('68');
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(() => {
     const d = new Date();
@@ -54,7 +50,7 @@ export default function CreateTripModal({ isOpen, onClose, onCreated }: CreateTr
 
     try {
       const created = await createTripMutation.mutateAsync({
-        destinationId,
+        provinceCode,
         name: name.trim(),
         startDate,
         endDate,
@@ -107,7 +103,7 @@ export default function CreateTripModal({ isOpen, onClose, onCreated }: CreateTr
               type="text"
               required
               maxLength={255}
-              placeholder="VD: Vi vu Vũng Tàu cuối tuần"
+              placeholder="VD: Khám phá Đà Lạt mộng mơ"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
@@ -119,12 +115,12 @@ export default function CreateTripModal({ isOpen, onClose, onCreated }: CreateTr
               Điểm đến chính <span className="text-red-500">*</span>
             </label>
             <select
-              value={destinationId}
-              onChange={(e) => setDestinationId(Number(e.target.value))}
+              value={provinceCode}
+              onChange={(e) => setProvinceCode(e.target.value)}
               className="w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             >
-              {POPULAR_DESTINATIONS.map((d) => (
-                <option key={d.id} value={d.id}>
+              {destinationOptions.map((d) => (
+                <option key={d.provinceCode} value={d.provinceCode}>
                   {d.name}
                 </option>
               ))}
