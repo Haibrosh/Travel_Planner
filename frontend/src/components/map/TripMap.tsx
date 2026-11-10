@@ -1,113 +1,172 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import type { Place } from "@/types/place";
+import { useMapStore } from "@/store/useMapStore";
+import { useMapHoverStore } from "@/store/useMapHoverStore";
 import { useItineraryStore, useSelectedDayItems } from "@/store/useItineraryStore";
 import { getCategoryLabel } from "@/utils/placeCategory";
 
 const DEFAULT_CENTER: L.LatLngTuple = [10.346, 107.084]; // Vũng Tàu
 const DEFAULT_ZOOM = 13;
 
-// Viết trọn class Tailwind trong chuỗi để Tailwind v4 quét được
-const MARKER_BASE =
-  "flex h-full w-full items-center justify-center rounded-full border-2 border-white text-xs font-extrabold text-white shadow-lg";
-const MARKER_NORMAL = `${MARKER_BASE} bg-teal-600`;
-const MARKER_SELECTED = `${MARKER_BASE} bg-[#0F766E] ring-4 ring-teal-300/60`;
+type MarkerState = "default" | "hover" | "selected";
 
-// Cache icon để không tạo lại instance mới mỗi lần render
+const MARKER_BASE =
+  "flex h-full w-full items-center justify-center rounded-full border-2 border-white text-xs font-extrabold text-white shadow-lg transition-transform";
+
+const MARKER_STYLES: Record<MarkerState, string> = {
+  default: `${MARKER_BASE} bg-teal-600`,
+  hover: `${MARKER_BASE} bg-teal-600 scale-110`,
+  selected: `${MARKER_BASE} bg-[#0F766E] ring-4 ring-teal-300/60 scale-110`,
+};
+
 const iconCache = new Map<string, L.DivIcon>();
 
-// Marker tròn đánh số; marker đang chọn to hơn và có viền ngoài
-function getNumberedIcon(order: number, isSelected: boolean): L.DivIcon {
-  const cacheKey = `${order}-${isSelected}`;
-  const cached = iconCache.get(cacheKey);
+function getMarkerIcon(order: number, state: MarkerState): L.DivIcon {
+  const key = `${order}-${state}`;
+  const cached = iconCache.get(key);
   if (cached) return cached;
 
-  const size = isSelected ? 36 : 30;
+  const size = state === "selected" ? 36 : 30;
   const icon = L.divIcon({
-    className: "", // bỏ style mặc định của divIcon
-    html: `<div class="${isSelected ? MARKER_SELECTED : MARKER_NORMAL}">${order}</div>`,
+    className: "",
+    html: `<div class="${MARKER_STYLES[state]}">${order}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
   });
-  iconCache.set(cacheKey, icon);
+  iconCache.set(key, icon);
   return icon;
 }
 
+function getMarkerState(isSelected: boolean, isHovered: boolean): MarkerState {
+  if (isSelected) return "selected";
+  if (isHovered) return "hover";
+  return "default";
+}
+
 // Tự căn khung khi đổi ngày / thêm / xóa địa điểm (đổi thứ tự thì không căn lại)
-function FitBoundsController() {
+function FitBoundsController({ places, dayKey }: { places: Place[]; dayKey: string | null }) {
   const map = useMap();
-  const dayKey = useItineraryStore((s) => s.selectedDayKey);
-  const items = useSelectedDayItems();
   const lastFitKey = useRef<string | null>(null);
 
   useEffect(() => {
-    const ids = items.map((i) => i.place.id).sort().join(",");
-    const fitKey = `${dayKey ?? ""}|${ids}`;
+    const coordsKey = places
+      .map((p) => `${p.id}:${p.lat},${p.lng}`)
+      .sort()
+      .join("|");
+    const fitKey = `${dayKey ?? ""}|${coordsKey}`;
     if (lastFitKey.current === fitKey) return;
     lastFitKey.current = fitKey;
 
-    if (items.length === 0) {
+    if (places.length === 0) {
       map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    } else if (items.length === 1) {
-      map.setView([items[0].place.lat, items[0].place.lng], 15);
+    } else if (places.length === 1) {
+      map.setView([places[0].lat, places[0].lng], 15);
     } else {
-      const points: L.LatLngTuple[] = items.map((i) => [i.place.lat, i.place.lng]);
+      const points: L.LatLngTuple[] = places.map((p) => [p.lat, p.lng]);
       map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
     }
-  }, [items, dayKey, map]);
+  }, [places, dayKey, map]);
 
   return null;
 }
 
-// Chọn thẻ trong timeline -> dịch bản đồ tới marker nếu nó sát mép / ngoài khung nhìn
-function PanToSelected() {
+// Chọn thẻ -> dịch bản đồ tới marker và tự động mở Popup
+function SelectedMarkerSync({
+  places,
+  selectedId,
+  markerRefs,
+}: {
+  places: Place[];
+  selectedId: string | null;
+  markerRefs: RefObject<Map<string, L.Marker>>;
+}) {
   const map = useMap();
-  const selectedPlaceId = useItineraryStore((s) => s.selectedPlaceId);
-  const items = useSelectedDayItems();
   const lastPannedId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (selectedPlaceId == null) {
+    if (selectedId == null) {
       lastPannedId.current = null;
+      map.closePopup();
       return;
     }
-    if (lastPannedId.current === selectedPlaceId) return;
 
-    const target = items.find((i) => i.place.id === selectedPlaceId);
+    const marker = markerRefs.current.get(String(selectedId));
+    if (marker && !marker.isPopupOpen()) {
+      marker.openPopup();
+    }
+
+    if (lastPannedId.current === selectedId) return;
+    const target = places.find((p) => String(p.id) === String(selectedId));
     if (!target) return;
-    lastPannedId.current = selectedPlaceId;
+    lastPannedId.current = selectedId;
 
-    const latLng = L.latLng(target.place.lat, target.place.lng);
+    const latLng = L.latLng(target.lat, target.lng);
     if (!map.getBounds().pad(-0.1).contains(latLng)) {
       map.panTo(latLng);
     }
-  }, [selectedPlaceId, items, map]);
+  }, [selectedId, places, markerRefs, map]);
 
   return null;
 }
 
-export default function TripMap() {
-  const selectedPlaceId = useItineraryStore((s) => s.selectedPlaceId);
-  const setSelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
-  const items = useSelectedDayItems();
+interface TripMapProps {
+  places?: Place[];
+}
 
-  const routePositions: L.LatLngTuple[] = items.map((i) => [i.place.lat, i.place.lng]);
+export default function TripMap({ places }: TripMapProps) {
+  const center = useMapStore((s) => s.center);
+  const zoom = useMapStore((s) => s.zoom);
+  const mapSelectedPlaceId = useMapStore((s) => s.selectedPlaceId);
+  const setMapSelectedPlaceId = useMapStore((s) => s.setSelectedPlaceId);
+  const hoveredPlaceId = useMapHoverStore((s) => s.hoveredPlaceId);
+
+  const dayKey = useItineraryStore((s) => s.selectedDayKey);
+  const itinerarySelectedPlaceId = useItineraryStore((s) => s.selectedPlaceId);
+  const setItinerarySelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
+  const itineraryItems = useSelectedDayItems();
+
+  const displayPlaces = useMemo<Place[]>(() => {
+    if (places !== undefined) return places;
+    return itineraryItems.map((i) => i.place);
+  }, [places, itineraryItems]);
+
+  const activeSelectedId =
+    mapSelectedPlaceId != null ? String(mapSelectedPlaceId) : itinerarySelectedPlaceId;
+
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map());
+
+  const routePositions: L.LatLngTuple[] = displayPlaces.map((p) => [p.lat, p.lng]);
+
+  const handleSelectPlace = (placeId: string | null) => {
+    setMapSelectedPlaceId(placeId);
+    setItinerarySelectedPlaceId(placeId);
+  };
 
   return (
-    <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} scrollWheelZoom className="h-full w-full">
+    <MapContainer
+      center={center ?? DEFAULT_CENTER}
+      zoom={zoom ?? DEFAULT_ZOOM}
+      scrollWheelZoom
+      className="h-full w-full"
+    >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <FitBoundsController />
-      <PanToSelected />
+      <FitBoundsController places={displayPlaces} dayKey={dayKey} />
+      <SelectedMarkerSync
+        places={displayPlaces}
+        selectedId={activeSelectedId}
+        markerRefs={markerRefs}
+      />
 
-      {/* Đường nối các điểm theo thứ tự trong ngày */}
       {routePositions.length >= 2 && (
         <Polyline
           positions={routePositions}
@@ -115,22 +174,40 @@ export default function TripMap() {
         />
       )}
 
-      {items.map((item, index) => {
-        const { place } = item;
-        const isSelected = selectedPlaceId === place.id;
+      {displayPlaces.map((place, index) => {
+        const isSelected = activeSelectedId != null && String(activeSelectedId) === String(place.id);
+        const isHovered = hoveredPlaceId != null && String(hoveredPlaceId) === String(place.id);
+
         return (
           <Marker
             key={place.id}
             position={[place.lat, place.lng]}
-            icon={getNumberedIcon(index + 1, isSelected)}
-            zIndexOffset={isSelected ? 1000 : 0}
-            eventHandlers={{ click: () => setSelectedPlaceId(place.id) }}
+            icon={getMarkerIcon(index + 1, getMarkerState(isSelected, isHovered))}
+            zIndexOffset={isSelected ? 1000 : isHovered ? 500 : 0}
+            ref={(marker) => {
+              if (marker) markerRefs.current.set(String(place.id), marker);
+              else markerRefs.current.delete(String(place.id));
+            }}
+            eventHandlers={{
+              click: () => handleSelectPlace(place.id),
+              popupclose: () => {
+                const currentMapSelected = useMapStore.getState().selectedPlaceId;
+                const currentItinerarySelected = useItineraryStore.getState().selectedPlaceId;
+                if (
+                  String(currentMapSelected) === String(place.id) ||
+                  String(currentItinerarySelected) === String(place.id)
+                ) {
+                  handleSelectPlace(null);
+                }
+              },
+            }}
           >
-            {/* Dùng div thay vì p vì leaflet.css đặt margin lớn cho p trong popup */}
             <Popup>
               <div className="text-xs">
                 <div className="font-semibold text-slate-900">{place.name}</div>
-                <div className="text-slate-500">{getCategoryLabel(place.category)}</div>
+                {place.category && (
+                  <div className="text-slate-500">{getCategoryLabel(place.category)}</div>
+                )}
               </div>
             </Popup>
           </Marker>

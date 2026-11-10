@@ -6,4 +6,8 @@ export interface Place {
   lat: number;
   lng: number;
   category: string;
+  // Trường tùy chọn cho thẻ lịch trình (khớp props TripActivityCard)
+  time?: string;
+  note?: string;
+  imageUrl?: string;
 }
