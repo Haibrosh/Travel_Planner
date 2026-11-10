@@ -1,7 +1,7 @@
 package com.travel.planner.repository;
 
 /**
- * Projection interface hứng kết quả từ native query ST_Centroid trong PostgreSQL PostGIS.
+ * Projection interface hứng kết quả từ native query ST_PointOnSurface trong PostgreSQL PostGIS.
  */
 public interface DestinationProjection {
 
@@ -19,6 +19,22 @@ public interface DestinationProjection {
 
     Double getCenterLat();
 
-    Double getCenterLng();
+    Double getCenterLon();
+
+    default Double getCenterLng() {
+        return getCenterLon();
+    }
+
+    Double getBboxMinLat();
+
+    Double getBboxMinLon();
+
+    Double getBboxMaxLat();
+
+    Double getBboxMaxLon();
+
+    Long getPoiCount();
+
+    Long getAttractionCount();
 }
 
