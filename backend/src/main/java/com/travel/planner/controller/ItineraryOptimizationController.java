@@ -2,11 +2,17 @@ package com.travel.planner.controller;
 
 import com.travel.planner.dto.OptimizationResponse;
 import com.travel.planner.model.ItineraryItem;
+import com.travel.planner.security.CustomUserDetails;
+import com.travel.planner.security.TripSecurityService;
 import com.travel.planner.service.ItineraryItemService;
 import com.travel.planner.util.RouteOptimizer;
 import com.travel.planner.util.RouteOptimizer.Coordinate;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,14 +26,23 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/trips")
 @RequiredArgsConstructor
+@Tag(name = "Itinerary Optimization", description = "Tối ưu lộ trình di chuyển trong ngày (2-opt)")
 public class ItineraryOptimizationController {
 
     private final ItineraryItemService itineraryItemService;
+    private final TripSecurityService tripSecurityService;
 
     @PostMapping("/{tripId}/optimize")
+    @Transactional
+    @Operation(summary = "Tối ưu thứ tự các địa điểm trong một ngày của chuyến đi")
     public ResponseEntity<OptimizationResponse> optimiseDay(
-            @PathVariable Long tripId,
-            @RequestParam Integer dayNumber) {
+            @PathVariable("tripId") Long tripId,
+            @RequestParam("dayNumber") Integer dayNumber,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        if (currentUser != null && currentUser.getUser() != null) {
+            tripSecurityService.getTripIfOwner(tripId, currentUser.getUser());
+        }
 
         // 1. Load items for the given trip & day, ordered by current positionIndex
         List<ItineraryItem> items = itineraryItemService.getItemsByTripAndDay(tripId, dayNumber);
@@ -54,16 +69,11 @@ public class ItineraryOptimizationController {
                 .collect(Collectors.toList());
         double after = RouteOptimizer.totalPathDistance(orderedCoords);
 
-        // 5. Persist the new ordering (positionIndex = 0,1,2,...)
+        // 5. Persist the new ordering (positionIndex = 1.0, 2.0, 3.0,...)
         itineraryItemService.saveNewOrder(ordered);
 
-        // 6. Build response payload
-        OptimizationResponse response = new OptimizationResponse(
-                ordered,
-                before,
-                after,
-                before - after
-        );
+        // 6. Build response payload using DTOs to avoid lazy proxy serialization issues
+        OptimizationResponse response = OptimizationResponse.fromEntities(ordered, before, after);
         return ResponseEntity.ok(response);
     }
 }

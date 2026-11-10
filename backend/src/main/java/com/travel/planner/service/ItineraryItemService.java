@@ -20,7 +20,7 @@ public class ItineraryItemService {
 
     @Transactional(readOnly = true)
     public List<ItineraryItem> getItemsByTrip(Long tripId) {
-        return repository.findByTripTripIdOrderByDayNumberAscPositionIndexAsc(tripId);
+        return repository.findAllByTripIdWithPlace(tripId);
     }
 
     @Transactional(readOnly = true)
@@ -63,13 +63,13 @@ public class ItineraryItemService {
     /**
      * Persist a new ordering for the supplied list of items.
      * The list must be in the desired order; the method updates the {@code positionIndex}
-     * (as a Double) to reflect the new order (0, 1, 2, …).
+     * (as a Double) to reflect the new 1-based order (1.0, 2.0, 3.0, …).
      */
     @Transactional
     public void saveNewOrder(List<ItineraryItem> orderedItems) {
         for (int i = 0; i < orderedItems.size(); i++) {
             ItineraryItem it = orderedItems.get(i);
-            it.setPositionIndex((double) i);
+            it.setPositionIndex((double) (i + 1));
         }
         repository.saveAll(orderedItems);
     }

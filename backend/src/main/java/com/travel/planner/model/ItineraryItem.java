@@ -7,10 +7,12 @@ import lombok.*;
 
 @Entity
 @Table(name = "itinerary_items", schema = "app")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"trip", "place"})
 public class ItineraryItem {
 
     @Id
