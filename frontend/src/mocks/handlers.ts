@@ -14,7 +14,7 @@ let mockTrips: TripResponse[] = [
     ownerUsername: 'haileader',
     provinceCode: '77',
     destinationName: 'Bà Rịa - Vũng Tàu',
-    destinationSlug: 'ba-ria-vung-tau',
+    destinationSlug: 'ba_ria_vung_tau',
     name: 'Khám phá Vũng Tàu cuối tuần',
     description: 'Chuyến đi nghỉ dưỡng ngắm bình minh biển Vũng Tàu cùng nhóm bạn.',
     startDate: '2026-11-14',
@@ -29,7 +29,7 @@ let mockTrips: TripResponse[] = [
     ownerUsername: 'haileader',
     provinceCode: '68',
     destinationName: 'Lâm Đồng (Đà Lạt)',
-    destinationSlug: 'lam-dong',
+    destinationSlug: 'lam_dong',
     name: 'Đà Lạt Săn Mây & Cà Phê Đồi Thông',
     description: 'Lịch trình săn mây Cầu Đất, cà phê Túi Mơ To và thưởng thức lẩu gà lá é.',
     startDate: '2026-12-05',
@@ -85,10 +85,11 @@ export const handlers = [
   http.get('*/api/v1/places', ({ request }) => {
     const url = new URL(request.url);
     const destinationId = (url.searchParams.get('destinationId') || '').toLowerCase();
-    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const q = (url.searchParams.get('q') || url.searchParams.get('keyword') || '').toLowerCase();
     const category = url.searchParams.get('category') || 'all';
     const sort = url.searchParams.get('sort') || 'popular';
-    const page = Number(url.searchParams.get('page') || 1);
+    const rawPageParam = url.searchParams.get('page');
+    const pageIndex = rawPageParam !== null ? Math.max(0, Number(rawPageParam)) : 0;
     const size = Number(url.searchParams.get('size') || 8);
 
     let list = EXPLORE_PLACES_MOCK.map(mapMockItemToPlace).filter((place) => {
@@ -112,21 +113,26 @@ export const handlers = [
     });
 
     if (sort === 'rating_desc') {
-      list = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      list = [...list].sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
     } else if (sort === 'name_asc') {
       list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
     } else {
-      list = [...list].sort((a, b) => (b.reviewCount ?? 0) - (a.reviewCount ?? 0));
+      list = [...list].sort(
+        (a, b) =>
+          (b.rankingScore ?? 0) - (a.rankingScore ?? 0) ||
+          (b.reviewCount ?? 0) - (a.reviewCount ?? 0)
+      );
     }
 
     const totalElements = list.length;
     const totalPages = Math.max(1, Math.ceil(totalElements / size));
-    const startIndex = (page - 1) * size;
+    const startIndex = pageIndex * size;
     const content = list.slice(startIndex, startIndex + size);
 
     return HttpResponse.json({
       content,
-      page,
+      number: pageIndex,
+      page: pageIndex + 1,
       size,
       totalElements,
       totalPages,
@@ -168,7 +174,7 @@ export const handlers = [
       ownerUsername: 'haileader',
       provinceCode: body.provinceCode || '68',
       destinationName: dest?.name || 'Lâm Đồng (Đà Lạt)',
-      destinationSlug: dest?.slug || 'lam-dong',
+      destinationSlug: dest?.slug || 'lam_dong',
       name: body.name,
       description: body.description || null,
       startDate: body.startDate,

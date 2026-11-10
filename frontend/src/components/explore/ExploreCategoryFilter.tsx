@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-export type CategoryType = 'all' | 'cafe' | 'food' | 'photo' | 'homestay' | 'sightseeing' | 'entertainment';
+export type CategoryType = 'all' | 'attraction' | 'restaurant' | 'cafe' | 'hotel';
 
 export interface CategoryItem {
   id: CategoryType;
@@ -17,12 +17,10 @@ interface ExploreCategoryFilterProps {
 
 const DEFAULT_CATEGORIES: CategoryItem[] = [
   { id: 'all', label: 'Tất cả' },
-  { id: 'cafe', label: 'Cà phê' },
-  { id: 'food', label: 'Ẩm thực' },
-  { id: 'photo', label: 'Chụp ảnh' },
-  { id: 'homestay', label: 'Homestay' },
-  { id: 'sightseeing', label: 'Tham quan' },
-  { id: 'entertainment', label: 'Vui chơi' },
+  { id: 'attraction', label: 'Điểm tham quan' },
+  { id: 'restaurant', label: 'Nhà hàng' },
+  { id: 'cafe', label: 'Quán cà phê' },
+  { id: 'hotel', label: 'Khách sạn & Lưu trú' },
 ];
 
 export const ExploreCategoryFilter: React.FC<ExploreCategoryFilterProps> = ({
@@ -40,7 +38,7 @@ export const ExploreCategoryFilter: React.FC<ExploreCategoryFilterProps> = ({
             type="button"
             onClick={() => onSelectCategory(cat.id)}
             style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
-            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 shadow-xs flex-shrink-0 ${
+            className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 shadow-xs flex-shrink-0 cursor-pointer ${
               isActive
                 ? 'bg-[#14B8A6] text-white shadow-md shadow-teal-500/20'
                 : 'bg-[#E2E8F0]/60 text-[#334155] hover:bg-[#E2E8F0]'

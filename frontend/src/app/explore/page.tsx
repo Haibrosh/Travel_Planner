@@ -2,16 +2,19 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { CheckCircle2, ArrowRight, X } from 'lucide-react';
 import { Navbar, NavTabType } from '@/components/layout/Navbar';
 import { ExploreCategoryFilter, CategoryType } from '@/components/explore/ExploreCategoryFilter';
 import { ExploreFilterBar } from '@/components/explore/ExploreFilterBar';
 import { ExploreCard } from '@/components/cards/ExploreCard';
 import { ExplorePagination } from '@/components/explore/ExplorePagination';
-import { AddToTripModal } from '@/components/modals/AddToTripModal';
+import { AddToTripModal, type AddToTripSelection } from '@/components/modals/AddToTripModal';
 import { PlaceDetailModal, PlaceDetailData } from '@/components/modals/PlaceDetailModal';
 import { PROVINCES_LIST } from '@/mocks/exploreData';
 import { useDestinations, usePlaces } from '@/hooks/usePlaces';
 import { useMyTrips } from '@/hooks/useTrips';
+import { useAddItineraryItemMutation } from '@/hooks/useItinerary';
+import { getPlaceFallbackImage } from '@/services/explore.service';
 import type { Place } from '@/types/explore';
 
 export default function ExplorePage() {
@@ -27,7 +30,7 @@ export default function ExplorePage() {
 
   // State phân trang
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 8;
 
   // State quản lý địa điểm đã ghé thăm
   const [visitedIds, setVisitedIds] = useState<Record<string, boolean>>({});
@@ -38,7 +41,15 @@ export default function ExplorePage() {
 
   // State quản lý Modal Thêm vào chuyến đi
   const [isAddToTripOpen, setIsAddToTripOpen] = useState<boolean>(false);
-  const [activePlaceTitle, setActivePlaceTitle] = useState<string>('');
+  const [activePlace, setActivePlace] = useState<Place | null>(null);
+
+  // Thông báo thêm địa điểm thành công
+  const [addedToast, setAddedToast] = useState<{
+    placeName: string;
+    tripId: number;
+    tripName: string;
+    dayLabel: string;
+  } | null>(null);
 
   // Debounce 300ms cho ô tìm kiếm
   useEffect(() => {
@@ -85,37 +96,32 @@ export default function ExplorePage() {
     size: itemsPerPage,
   });
 
-  // Lấy danh sách chuyến đi thật của user cho AddToTripModal
+  // 3. Lấy danh sách chuyến đi thật của user & mutation thêm vào lịch trình
   const { data: myTrips } = useMyTrips();
-  const userTripTitles = useMemo(() => {
-    if (myTrips && myTrips.length > 0) {
-      return myTrips.map((t) => t.name);
-    }
-    return undefined;
-  }, [myTrips]);
+  const addItineraryItemMutation = useAddItineraryItemMutation();
 
   const currentPlaces = placesPage?.content ?? [];
   const totalElements = placesPage?.totalElements ?? 0;
   const totalPages = placesPage?.totalPages ?? 1;
 
-  // Mở modal Thêm vào chuyến đi
-  const handleOpenAddToTrip = (title: string) => {
-    setActivePlaceTitle(title);
+  // Mở modal Thêm vào chuyến đi với đầy đủ thông tin Place từ places_v2
+  const handleOpenAddToTrip = (place: Place) => {
+    setActivePlace(place);
     setIsAddToTripOpen(true);
   };
 
-  // Mở modal Chi tiết địa điểm
+  // Mở modal Chi tiết địa điểm (giữ nguyên rating = null khi chưa có đánh giá)
   const handleCardClick = (place: Place) => {
     const key = String(place.placeId);
     setSelectedPlaceDetail({
       id: place.placeId,
       title: place.name,
-      category: place.subcategory || place.tags?.[0] || 'Khám phá',
-      subcategory: place.subcategory,
+      category: place.category,
+      subcategory: place.subcategory || place.tags?.[0] || 'Khám phá',
       address: place.address,
-      rating: place.rating ?? 4.8,
+      rating: place.rating,
       reviewCount: place.reviewCount,
-      imageUrl: place.photoUrl || undefined,
+      imageUrl: place.photoUrl || getPlaceFallbackImage(place.category),
       description: place.description,
       openingHours: place.openingHours,
       phone: place.phone,
@@ -123,6 +129,9 @@ export default function ExplorePage() {
       price: place.price,
       latitude: place.latitude,
       longitude: place.longitude,
+      rankingScore: place.rankingScore,
+      hasContent: place.hasContent,
+      content: place.content,
       isVisited: Boolean(visitedIds[key]),
     });
     setIsDetailOpen(true);
@@ -132,7 +141,27 @@ export default function ExplorePage() {
     setIsDetailOpen(false);
     setSelectedPlaceDetail(null);
     setIsAddToTripOpen(false);
-    setActivePlaceTitle('');
+    setActivePlace(null);
+  };
+
+  const handleSaveToItinerary = async (selection: AddToTripSelection) => {
+    if (!activePlace) return;
+
+    await addItineraryItemMutation.mutateAsync({
+      tripId: selection.tripId,
+      placeId: activePlace.placeId,
+      dayNumber: selection.dayNumber,
+      placeSnapshot: activePlace,
+    });
+
+    setAddedToast({
+      placeName: activePlace.name,
+      tripId: selection.tripId,
+      tripName: selection.tripName,
+      dayLabel: selection.dayLabel,
+    });
+
+    handleCloseAllModals();
   };
 
   return (
@@ -146,10 +175,40 @@ export default function ExplorePage() {
             router.push('/my-trips');
           }
         }}
-        onNotificationClick={() => alert('Mở thông báo')}
+        onNotificationClick={() => router.push('/my-trips')}
         onUserClick={() => router.push('/my-trips')}
         onLogoClick={() => router.push('/explore')}
       />
+
+      {/* Toast thông báo khi vừa thêm địa điểm vào chuyến đi */}
+      {addedToast && (
+        <div className="fixed top-20 right-6 z-50 max-w-md rounded-2xl border border-teal-200 bg-white p-4 shadow-xl flex items-start gap-3 animate-in slide-in-from-top-3 duration-200">
+          <CheckCircle2 className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-xs">
+            <p className="font-extrabold text-slate-900">
+              Đã thêm &ldquo;{addedToast.placeName}&rdquo; vào lịch trình!
+            </p>
+            <p className="text-slate-500 mt-0.5">
+              {addedToast.tripName} • <span className="font-semibold text-teal-700">{addedToast.dayLabel}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push(`/trips/${addedToast.tripId}`)}
+              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-teal-700 transition-colors cursor-pointer"
+            >
+              <span>Mở lịch trình chuyến đi</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddedToast(null)}
+            className="text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* 2. Container chính */}
       <main className="w-full max-w-[1440px] mx-auto px-6 sm:px-12 pt-10 pb-16 space-y-6">
@@ -174,7 +233,7 @@ export default function ExplorePage() {
           />
         </div>
 
-        {/* Thanh chip phân loại danh mục */}
+        {/* Thanh chip phân loại danh mục (4 mã category của places_v2) */}
         <div className="max-w-[900px] mx-auto pt-2">
           <ExploreCategoryFilter
             activeCategory={activeCategory}
@@ -188,7 +247,7 @@ export default function ExplorePage() {
         {/* Thống kê kết quả & Bộ chọn Sắp xếp */}
         <div className="max-w-[1280px] mx-auto flex flex-wrap items-center justify-between gap-3 px-1 pt-4">
           <span className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-            Tìm thấy <span className="text-[#14B8A6] font-black">{totalElements}</span> địa điểm phù hợp
+            Tìm thấy <span className="text-[#14B8A6] font-black">{totalElements.toLocaleString('vi-VN')}</span> địa điểm phù hợp
             {isPlacesFetching && !isPlacesLoading && (
               <span className="ml-2 text-[11px] font-medium text-teal-600 normal-case">
                 (Đang cập nhật...)
@@ -216,7 +275,7 @@ export default function ExplorePage() {
         {/* Lưới thẻ địa điểm */}
         {isPlacesLoading ? (
           <div className="max-w-[1280px] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-            {[1, 2, 3, 4].map((skeleton) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((skeleton) => (
               <div
                 key={skeleton}
                 className="h-[360px] rounded-[22px] border border-[#E2E8F0] bg-white overflow-hidden animate-pulse flex flex-col"
@@ -244,13 +303,18 @@ export default function ExplorePage() {
                   key={place.placeId}
                   id={place.placeId}
                   title={place.name}
-                  imageUrl={
-                    place.photoUrl ||
-                    'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80'
+                  imageUrl={place.photoUrl || getPlaceFallbackImage(place.category)}
+                  category={place.category}
+                  rating={place.rating}
+                  reviewCount={place.reviewCount}
+                  hasContent={place.hasContent}
+                  tags={
+                    place.tags && place.tags.length > 0
+                      ? place.tags
+                      : [place.subcategory || 'Khám phá']
                   }
-                  tags={place.tags && place.tags.length > 0 ? place.tags : [place.subcategory || 'Khám phá']}
                   address={place.address}
-                  onAddToTrip={() => handleOpenAddToTrip(place.name)}
+                  onAddToTrip={() => handleOpenAddToTrip(place)}
                   onClick={() => handleCardClick(place)}
                 />
               ))
@@ -289,23 +353,38 @@ export default function ExplorePage() {
           }
         }}
         onAddToTrip={(detail) => {
-          handleOpenAddToTrip(detail.title);
+          const matched = currentPlaces.find((p) => String(p.placeId) === String(detail.id));
+          if (matched) {
+            handleOpenAddToTrip(matched);
+          } else {
+            handleOpenAddToTrip({
+              placeId: Number(detail.id),
+              name: detail.title,
+              category: detail.category || 'attraction',
+              subcategory: detail.subcategory ?? null,
+              address: detail.address || 'Việt Nam',
+              rating: detail.rating ?? null,
+              reviewCount: detail.reviewCount ?? null,
+              photoUrl: detail.imageUrl || getPlaceFallbackImage(detail.category),
+              latitude: detail.latitude ?? null,
+              longitude: detail.longitude ?? null,
+              description: detail.description ?? null,
+            });
+          }
         }}
       />
 
-      {/* 5. Modal Thêm vào chuyến đi */}
+      {/* 5. Modal Thêm vào chuyến đi (kết nối API thật) */}
       <AddToTripModal
         isOpen={isAddToTripOpen}
         onClose={() => {
           setIsAddToTripOpen(false);
-          setActivePlaceTitle('');
+          setActivePlace(null);
         }}
-        locationTitle={activePlaceTitle}
-        trips={userTripTitles}
-        onSave={(trip: string, date: string) => {
-          alert(`Đã thêm "${activePlaceTitle}" vào chuyến đi "${trip}" (Ngày ${date}) thành công!`);
-          handleCloseAllModals();
-        }}
+        locationTitle={activePlace?.name}
+        tripObjects={myTrips}
+        isSubmitting={addItineraryItemMutation.isPending}
+        onSaveTripDay={handleSaveToItinerary}
       />
     </div>
   );
