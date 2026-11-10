@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Chức năng: Truy vấn và thao tác dữ liệu các địa điểm trong lịch trình chuyến đi (bảng app.itinerary_items).
@@ -17,6 +18,38 @@ public interface ItineraryItemRepository extends JpaRepository<ItineraryItem, Lo
 
     // Lấy tất cả địa điểm trong chuyến đi sắp xếp theo ngày và thứ tự vị trí
     List<ItineraryItem> findByTripTripIdOrderByDayNumberAscPositionIndexAsc(Long tripId);
+
+    // Lấy tất cả địa điểm trong chuyến đi kèm thông tin Place chi tiết, sắp xếp theo ngày và thứ tự vị trí
+    @Query("SELECT i FROM ItineraryItem i " +
+           "JOIN FETCH i.place p " +
+           "LEFT JOIN FETCH p.destination " +
+           "WHERE i.trip.tripId = :tripId " +
+           "ORDER BY i.dayNumber ASC NULLS LAST, i.positionIndex ASC")
+    List<ItineraryItem> findAllByTripIdWithPlace(@Param("tripId") Long tripId);
+
+    // Tìm giá trị position_index lớn nhất trong một ngày cụ thể của chuyến đi
+    @Query("SELECT MAX(i.positionIndex) FROM ItineraryItem i " +
+           "WHERE i.trip.tripId = :tripId AND i.dayNumber = :dayNumber")
+    Optional<Double> findMaxPositionIndexByTripIdAndDayNumber(
+            @Param("tripId") Long tripId,
+            @Param("dayNumber") Integer dayNumber
+    );
+
+    // Tìm một mục lịch trình theo itemId và tripId kèm thông tin Place chi tiết
+    @Query("SELECT i FROM ItineraryItem i " +
+           "JOIN FETCH i.place p " +
+           "LEFT JOIN FETCH p.destination " +
+           "WHERE i.itemId = :itemId AND i.trip.tripId = :tripId")
+    Optional<ItineraryItem> findByItemIdAndTripIdWithPlace(
+            @Param("itemId") Long itemId,
+            @Param("tripId") Long tripId
+    );
+
+    // Tìm một mục lịch trình theo itemId và tripId
+    Optional<ItineraryItem> findByItemIdAndTrip_TripId(Long itemId, Long tripId);
+
+    // Lấy tất cả địa điểm trong một ngày cụ thể của chuyến đi, sắp xếp theo positionIndex tăng dần
+    List<ItineraryItem> findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(Long tripId, Integer dayNumber);
 
     // Chuyển các địa điểm có ngày vượt quá số ngày của chuyến đi về danh sách chưa xếp ngày (day_number = NULL)
     @Modifying(flushAutomatically = true, clearAutomatically = true)
