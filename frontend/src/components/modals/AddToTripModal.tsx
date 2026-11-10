@@ -8,7 +8,7 @@ import { useTripUiStore } from '@/store/useTripUiStore';
 export interface AddToTripSelection {
   tripId: number;
   tripName: string;
-  dayNumber: number | null;
+  dayNumber: number;
   dayLabel: string;
 }
 
@@ -25,7 +25,7 @@ export interface AddToTripModalProps {
 }
 
 interface DayOption {
-  dayNumber: number | null;
+  dayNumber: number;
   label: string;
 }
 
@@ -35,7 +35,6 @@ function buildDayOptionsForTrip(trip?: TripResponse): DayOption[] {
       { dayNumber: 1, label: 'Ngày 1' },
       { dayNumber: 2, label: 'Ngày 2' },
       { dayNumber: 3, label: 'Ngày 3' },
-      { dayNumber: null, label: 'Pool (Chưa xếp ngày)' },
     ];
   }
 
@@ -63,13 +62,11 @@ function buildDayOptionsForTrip(trip?: TripResponse): DayOption[] {
       options.push({ dayNumber: 1, label: `Ngày 1 (${trip.startDate})` });
     }
 
-    options.push({ dayNumber: null, label: 'Pool (Chưa xếp ngày)' });
     return options;
   } catch {
     return [
       { dayNumber: 1, label: 'Ngày 1' },
       { dayNumber: 2, label: 'Ngày 2' },
-      { dayNumber: null, label: 'Pool (Chưa xếp ngày)' },
     ];
   }
 }
@@ -145,37 +142,31 @@ export const AddToTripModal: React.FC<AddToTripModalProps> = ({
 
   const activeDayValue =
     chosenDayValue !== null &&
-    dayOptions.some((o) =>
-      o.dayNumber === null ? chosenDayValue === 'pool' : String(o.dayNumber) === chosenDayValue
-    )
+    dayOptions.some((o) => String(o.dayNumber) === chosenDayValue)
       ? chosenDayValue
       : defaultDayValue;
 
   const handleSubmit = async () => {
-    const parsedDayNumber = activeDayValue === 'pool' ? null : Number(activeDayValue);
+    const parsedDayNumber = Math.max(1, Number(activeDayValue || 1));
     const chosenOption =
-      dayOptions.find((o) =>
-        parsedDayNumber === null ? o.dayNumber === null : o.dayNumber === parsedDayNumber
-      ) ?? dayOptions[0];
+      dayOptions.find((o) => o.dayNumber === parsedDayNumber) ?? dayOptions[0];
 
     const tripName = selectedTripObj?.name ?? trips[0] ?? 'Chuyến đi của tôi';
     const tripId = selectedTripObj?.tripId ?? 1;
 
     // Cập nhật store ngày & chuyến đi đang chọn
     setSelectedTripId(String(tripId));
-    if (parsedDayNumber !== null && parsedDayNumber >= 1) {
-      setSelectedDayNumber(parsedDayNumber);
-    }
+    setSelectedDayNumber(parsedDayNumber);
 
     if (onSaveTripDay) {
       await onSaveTripDay({
         tripId,
         tripName,
         dayNumber: parsedDayNumber,
-        dayLabel: chosenOption?.label ?? `Ngày ${parsedDayNumber ?? 1}`,
+        dayLabel: chosenOption?.label ?? `Ngày ${parsedDayNumber}`,
       });
     } else {
-      onSave?.(tripName, chosenOption?.label ?? String(parsedDayNumber ?? 1));
+      onSave?.(tripName, chosenOption?.label ?? String(parsedDayNumber));
       onClose();
     }
   };
@@ -249,14 +240,11 @@ export const AddToTripModal: React.FC<AddToTripModalProps> = ({
                 disabled={isSubmitting}
                 className="w-full h-[40px] px-3.5 pr-8 bg-white border border-[#CBD5E1] rounded-xl text-xs font-bold text-[#0F172A] appearance-none focus:outline-none focus:ring-2 focus:ring-[#14B8A6]/20 focus:border-[#14B8A6] cursor-pointer"
               >
-                {dayOptions.map((opt, idx) => {
-                  const val = opt.dayNumber === null ? 'pool' : String(opt.dayNumber);
-                  return (
-                    <option key={idx} value={val}>
-                      {opt.label}
-                    </option>
-                  );
-                })}
+                {dayOptions.map((opt) => (
+                  <option key={opt.dayNumber} value={String(opt.dayNumber)}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
               <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-[#64748B]">
                 <ChevronDown className="w-4 h-4 stroke-[2.5]" />

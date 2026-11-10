@@ -10,8 +10,9 @@ export interface ItineraryItemResponse {
   itemId: number;
   tripId: number;
   placeId: number;
-  /** NULL nếu nằm trong Pool chưa xếp ngày; >= 1 nếu thuộc Ngày 1, Ngày 2... */
+  /** NULL nếu bị đưa về danh sách chưa xếp ngày khi rút ngắn chuyến đi; >= 1 nếu thuộc Ngày 1, Ngày 2... */
   dayNumber: number | null;
+  orderIndex: number;
   positionIndex: number;
   startTime?: string | null;
   endTime?: string | null;
@@ -23,8 +24,7 @@ export interface ItineraryItemResponse {
 
 export interface AddItineraryItemRequest {
   placeId: number;
-  dayNumber: number | null;
-  positionIndex?: number;
+  dayNumber: number;
   startTime?: string | null;
   endTime?: string | null;
   note?: string | null;
@@ -34,10 +34,21 @@ export interface AddItineraryItemRequest {
 
 export interface UpdateItineraryItemRequest {
   dayNumber?: number | null;
+  targetDayNumber?: number | null;
+  orderIndex?: number;
   positionIndex?: number;
+  prevItemId?: number | null;
+  nextItemId?: number | null;
   startTime?: string | null;
   endTime?: string | null;
   note?: string | null;
+}
+
+export interface ReorderItineraryItemRequest {
+  prevItemId?: number | null;
+  nextItemId?: number | null;
+  targetDayNumber?: number | null;
+  orderIndex?: number | null;
 }
 
 const STORAGE_KEY_PREFIX = 'travelsync_itinerary_trip_';
@@ -75,38 +86,14 @@ function extractRawItemsArray(raw: unknown): Record<string, unknown>[] {
   }
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.orderedItems)) {
+      return obj.orderedItems as Record<string, unknown>[];
+    }
     if (Array.isArray(obj.items)) {
       return obj.items as Record<string, unknown>[];
     }
     if (Array.isArray(obj.content)) {
       return obj.content as Record<string, unknown>[];
-    }
-    // Hỗ trợ cấu trúc gom nhóm theo days + pool (nếu BE trả dạng grouped)
-    if (Array.isArray(obj.days)) {
-      const flattened: Record<string, unknown>[] = [];
-      for (const dayGroup of obj.days as Record<string, unknown>[]) {
-        const dayNum =
-          dayGroup.dayNumber !== undefined && dayGroup.dayNumber !== null
-            ? Number(dayGroup.dayNumber)
-            : null;
-        if (Array.isArray(dayGroup.items)) {
-          for (const item of dayGroup.items as Record<string, unknown>[]) {
-            flattened.push({
-              ...item,
-              dayNumber: item.dayNumber ?? dayNum,
-            });
-          }
-        }
-      }
-      if (Array.isArray(obj.pool)) {
-        for (const poolItem of obj.pool as Record<string, unknown>[]) {
-          flattened.push({
-            ...poolItem,
-            dayNumber: null,
-          });
-        }
-      }
-      return flattened;
     }
   }
   return [];
@@ -195,9 +182,11 @@ async function normalizeItineraryItem(
       ? null
       : Number(raw.dayNumber);
 
-  const positionIndex =
-    raw.positionIndex !== undefined && raw.positionIndex !== null
-      ? Number(raw.positionIndex)
+  // ItineraryItemResponse.java trả về orderIndex (từ item.getPositionIndex())
+  const rawOrder = raw.orderIndex ?? raw.positionIndex;
+  const resolvedOrder =
+    rawOrder !== undefined && rawOrder !== null && !Number.isNaN(Number(rawOrder))
+      ? Number(rawOrder)
       : fallbackIndex + 1;
 
   return {
@@ -205,7 +194,8 @@ async function normalizeItineraryItem(
     tripId: Number(raw.tripId ?? fallbackTripId),
     placeId,
     dayNumber: dayNumber !== null && !Number.isNaN(dayNumber) && dayNumber > 0 ? dayNumber : null,
-    positionIndex: !Number.isNaN(positionIndex) ? positionIndex : fallbackIndex + 1,
+    orderIndex: resolvedOrder,
+    positionIndex: resolvedOrder,
     startTime: raw.startTime ? String(raw.startTime) : null,
     endTime: raw.endTime ? String(raw.endTime) : null,
     note: raw.note ? String(raw.note) : null,
@@ -222,7 +212,7 @@ function sortItineraryItems(items: ItineraryItemResponse[]): ItineraryItemRespon
     if (a.dayNumber !== b.dayNumber) {
       return (a.dayNumber ?? 0) - (b.dayNumber ?? 0);
     }
-    return a.positionIndex - b.positionIndex;
+    return a.orderIndex - b.orderIndex;
   });
 }
 
@@ -243,51 +233,36 @@ export const itineraryService = {
       saveLocalItineraryItems(tripId, sorted);
       return sorted;
     } catch {
-      try {
-        const altResponse = await axiosClient.get(
-          `/api/v1/trips/${tripId}/itinerary/items`
-        );
-        const rawArray = extractRawItemsArray(altResponse);
-        const normalized = await Promise.all(
-          rawArray.map((item, idx) => normalizeItineraryItem(item, numericTripId, idx))
-        );
-        const sorted = sortItineraryItems(normalized);
-        saveLocalItineraryItems(tripId, sorted);
-        return sorted;
-      } catch {
-        // Fallback sang cache localStorage khi API của Hồng chưa bật hoặc offline
-        return sortItineraryItems(getLocalItineraryItems(tripId));
-      }
+      return sortItineraryItems(getLocalItineraryItems(tripId));
     }
   },
 
   /**
-   * Thêm một địa điểm vào ngày đang chọn (hoặc vào Pool nếu dayNumber = null)
+   * Thêm một địa điểm vào ngày đang chọn trong lịch trình
    * POST /api/v1/trips/{tripId}/itinerary/items
+   * Body khớp CreateItineraryItemRequest.java: { placeId, dayNumber (>= 1), startTime, endTime }
    */
   addItineraryItem: async (
     tripId: string | number,
     payload: AddItineraryItemRequest
   ): Promise<ItineraryItemResponse> => {
     const numericTripId = Number(tripId);
+    const safeDayNumber = Math.max(1, Number(payload.dayNumber || 1));
     const currentLocal = getLocalItineraryItems(tripId);
-    const sameDayItems = currentLocal.filter(
-      (i) => i.dayNumber === (payload.dayNumber ?? null)
-    );
-    const maxPos = sameDayItems.reduce(
-      (max, item) => Math.max(max, item.positionIndex),
-      0
-    );
-    const computedPositionIndex = payload.positionIndex ?? maxPos + 1;
+    const sameDayItems = currentLocal.filter((i) => i.dayNumber === safeDayNumber);
 
-    const requestBody = {
+    const requestBody: {
+      placeId: number;
+      dayNumber: number;
+      startTime?: string | null;
+      endTime?: string | null;
+    } = {
       placeId: Number(payload.placeId),
-      dayNumber: payload.dayNumber ?? null,
-      positionIndex: computedPositionIndex,
-      startTime: payload.startTime ?? null,
-      endTime: payload.endTime ?? null,
-      note: payload.note ?? null,
+      dayNumber: safeDayNumber,
     };
+
+    if (payload.startTime) requestBody.startTime = payload.startTime;
+    if (payload.endTime) requestBody.endTime = payload.endTime;
 
     try {
       const response = await axiosClient.post(
@@ -307,45 +282,31 @@ export const itineraryService = {
       saveLocalItineraryItems(tripId, updatedList);
       return created;
     } catch {
-      try {
-        const altResponse = await axiosClient.post(
-          `/api/v1/trips/${tripId}/itinerary`,
-          requestBody
-        );
-        const created = await normalizeItineraryItem(
-          (altResponse as unknown as Record<string, unknown>) || requestBody,
-          numericTripId,
-          sameDayItems.length,
-          payload.placeSnapshot
-        );
-        const updatedList = sortItineraryItems([
-          ...currentLocal.filter((i) => i.itemId !== created.itemId),
-          created,
-        ]);
-        saveLocalItineraryItems(tripId, updatedList);
-        return created;
-      } catch {
-        // Fallback lưu localStorage khi BE chưa sẵn sàng để luồng UI hoạt động trơn tru
-        const fallbackCreated = await normalizeItineraryItem(
-          {
-            itemId: Date.now(),
-            tripId: numericTripId,
-            ...requestBody,
-          },
-          numericTripId,
-          sameDayItems.length,
-          payload.placeSnapshot
-        );
-        const updatedList = sortItineraryItems([...currentLocal, fallbackCreated]);
-        saveLocalItineraryItems(tripId, updatedList);
-        return fallbackCreated;
-      }
+      const maxPos = sameDayItems.reduce(
+        (max, item) => Math.max(max, item.orderIndex),
+        0
+      );
+      const fallbackCreated = await normalizeItineraryItem(
+        {
+          itemId: Date.now(),
+          tripId: numericTripId,
+          orderIndex: maxPos + 1,
+          ...requestBody,
+        },
+        numericTripId,
+        sameDayItems.length,
+        payload.placeSnapshot
+      );
+      const updatedList = sortItineraryItems([...currentLocal, fallbackCreated]);
+      saveLocalItineraryItems(tripId, updatedList);
+      return fallbackCreated;
     }
   },
 
   /**
-   * Cập nhật ngày / thứ tự / thời gian của địa điểm trong lịch trình
-   * PUT /api/v1/trips/{tripId}/itinerary/items/{itemId}
+   * Cập nhật thời gian hoặc đổi ngày / thứ tự của một địa điểm trong lịch trình
+   * - Đổi ngày / thứ tự: PUT /api/v1/trips/{tripId}/itinerary/items/{itemId}/reorder
+   * - Đổi startTime / endTime: PUT /api/v1/trips/{tripId}/itinerary/items/{itemId}
    */
   updateItineraryItem: async (
     tripId: string | number,
@@ -356,13 +317,40 @@ export const itineraryService = {
     const currentLocal = getLocalItineraryItems(tripId);
     const existing = currentLocal.find((i) => String(i.itemId) === String(itemId));
 
+    const targetDay =
+      payload.targetDayNumber !== undefined
+        ? payload.targetDayNumber
+        : payload.dayNumber;
+
+    const orderVal = payload.orderIndex ?? payload.positionIndex;
+
     try {
-      const response = await axiosClient.put(
-        `/api/v1/trips/${tripId}/itinerary/items/${itemId}`,
-        payload
-      );
+      let response: unknown;
+      if (targetDay !== undefined && targetDay !== null) {
+        response = await axiosClient.put(
+          `/api/v1/trips/${tripId}/itinerary/items/${itemId}/reorder`,
+          {
+            targetDayNumber: Number(targetDay),
+            prevItemId: payload.prevItemId ?? null,
+            nextItemId: payload.nextItemId ?? null,
+            orderIndex: orderVal ?? null,
+          }
+        );
+      } else {
+        response = await axiosClient.put(
+          `/api/v1/trips/${tripId}/itinerary/items/${itemId}`,
+          {
+            startTime: payload.startTime ?? null,
+            endTime: payload.endTime ?? null,
+            prevItemId: payload.prevItemId ?? null,
+            nextItemId: payload.nextItemId ?? null,
+            orderIndex: orderVal ?? null,
+          }
+        );
+      }
+
       const updated = await normalizeItineraryItem(
-        (response as unknown as Record<string, unknown>) || {
+        (response as Record<string, unknown>) || {
           ...existing,
           ...payload,
           itemId,
@@ -377,24 +365,24 @@ export const itineraryService = {
       saveLocalItineraryItems(tripId, nextList);
       return updated;
     } catch {
+      const resolvedOrder = orderVal ?? existing?.orderIndex ?? 1;
       const fallbackUpdated: ItineraryItemResponse = {
         ...(existing || {
           itemId: Number(itemId),
           tripId: numericTripId,
           placeId: 0,
-          dayNumber: payload.dayNumber ?? 1,
-          positionIndex: payload.positionIndex ?? 1,
+          dayNumber: targetDay ?? 1,
+          orderIndex: resolvedOrder,
+          positionIndex: resolvedOrder,
           place: normalizePlace({ placeId: 0, name: 'Địa điểm' }),
         }),
         dayNumber:
-          payload.dayNumber !== undefined
-            ? payload.dayNumber
-            : (existing?.dayNumber ?? null),
-        positionIndex: payload.positionIndex ?? existing?.positionIndex ?? 1,
+          targetDay !== undefined ? targetDay : (existing?.dayNumber ?? 1),
+        orderIndex: resolvedOrder,
+        positionIndex: resolvedOrder,
         startTime:
           payload.startTime !== undefined ? payload.startTime : existing?.startTime,
         endTime: payload.endTime !== undefined ? payload.endTime : existing?.endTime,
-        note: payload.note !== undefined ? payload.note : existing?.note,
       };
       const nextList = sortItineraryItems(
         currentLocal.map((i) =>
@@ -407,7 +395,23 @@ export const itineraryService = {
   },
 
   /**
-   * Xóa một địa điểm khỏi lịch trình chuyến đi
+   * Kéo thả thay đổi thứ tự địa điểm (PATCH/PUT /api/v1/trips/{tripId}/itinerary/items/{itemId}/reorder)
+   */
+  reorderItineraryItem: async (
+    tripId: string | number,
+    itemId: number | string,
+    payload: ReorderItineraryItemRequest
+  ): Promise<ItineraryItemResponse> => {
+    return itineraryService.updateItineraryItem(tripId, itemId, {
+      targetDayNumber: payload.targetDayNumber,
+      prevItemId: payload.prevItemId,
+      nextItemId: payload.nextItemId,
+      orderIndex: payload.orderIndex ?? undefined,
+    });
+  },
+
+  /**
+   * Xóa cứng một địa điểm khỏi lịch trình chuyến đi
    * DELETE /api/v1/trips/{tripId}/itinerary/items/{itemId}
    */
   deleteItineraryItem: async (
@@ -421,11 +425,7 @@ export const itineraryService = {
     try {
       await axiosClient.delete(`/api/v1/trips/${tripId}/itinerary/items/${itemId}`);
     } catch {
-      try {
-        await axiosClient.delete(`/api/v1/trips/${tripId}/itinerary/${itemId}`);
-      } catch {
-        // Đã xóa khỏi local cache khi BE chưa sẵn sàng
-      }
+      // Đã xóa khỏi local cache khi offline
     }
   },
 };
