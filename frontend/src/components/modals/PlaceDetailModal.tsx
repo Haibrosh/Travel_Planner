@@ -12,8 +12,11 @@ import {
   Globe,
   Plus,
   Tag,
+  BookOpen,
 } from 'lucide-react';
 import { usePlaceDetail } from '@/hooks/usePlaces';
+import { getPlaceFallbackImage } from '@/services/explore.service';
+import type { PlaceContent } from '@/types/explore';
 
 export interface PlaceDetailData {
   id: string | number;
@@ -21,7 +24,7 @@ export interface PlaceDetailData {
   category: string;
   subcategory?: string | null;
   address?: string;
-  rating?: number;
+  rating?: number | null;
   reviewCount?: number | null;
   imageUrl?: string;
   description?: string | null;
@@ -31,6 +34,9 @@ export interface PlaceDetailData {
   price?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  rankingScore?: number | null;
+  hasContent?: boolean;
+  content?: PlaceContent | null;
   isVisited?: boolean;
 }
 
@@ -55,24 +61,34 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
   if (!isOpen || !place) return null;
 
+  const rawCategory = fetchedPlace?.category || place.category || 'attraction';
+  const fallbackImage = getPlaceFallbackImage(rawCategory);
+
   const displayTitle = fetchedPlace?.name || place.title;
   const displayCategory =
-    fetchedPlace?.subcategory || fetchedPlace?. tags?.[0] || place.category;
+    fetchedPlace?.subcategory || fetchedPlace?.tags?.[0] || place.subcategory || place.category;
   const displayAddress =
-    fetchedPlace?.address || place.address || 'Đà Lạt, Lâm Đồng, Việt Nam';
-  const displayRating = fetchedPlace?.rating ?? place.rating;
-  const displayReviews = fetchedPlace?.reviewCount ?? place.reviewCount;
+    fetchedPlace?.address || place.address || 'Việt Nam';
+  const displayRating =
+    fetchedPlace !== undefined ? fetchedPlace.rating : (place.rating ?? null);
+  const displayReviews =
+    fetchedPlace !== undefined ? fetchedPlace.reviewCount : (place.reviewCount ?? null);
   const displayImage =
-    fetchedPlace?.photoUrl ||
-    place.imageUrl ||
-    'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80';
-  const displayDescription = fetchedPlace?.description ?? place.description;
+    fetchedPlace?.photoUrl || place.imageUrl || fallbackImage;
+  const displayContent = fetchedPlace?.content ?? place.content ?? null;
+  const displayDescription =
+    displayContent?.summary ?? fetchedPlace?.description ?? place.description;
   const displayHours = fetchedPlace?.openingHours ?? place.openingHours;
   const displayPhone = fetchedPlace?.phone ?? place.phone;
   const displayWebsite = fetchedPlace?.website ?? place.website;
   const displayPrice = fetchedPlace?.price ?? place.price;
   const lat = fetchedPlace?.latitude ?? place.latitude;
   const lng = fetchedPlace?.longitude ?? place.longitude;
+
+  const hasValidRating =
+    displayRating !== null &&
+    displayRating !== undefined &&
+    !Number.isNaN(Number(displayRating));
 
   const mapsQuery =
     lat !== null && lat !== undefined && lng !== null && lng !== undefined
@@ -82,16 +98,21 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   return (
     <div
       style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
-      className="fixed bottom-6 right-6 z-40 w-[calc(100vw-3rem)] max-w-[400px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
+      className="fixed bottom-6 right-6 z-40 w-[calc(100vw-3rem)] max-w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
     >
       {/* 1. Header ảnh & Nút đóng */}
-      <div className="relative w-full h-[175px] bg-slate-100">
+      <div className="relative w-full h-[180px] bg-slate-100">
         <img
           src={displayImage}
           alt={displayTitle}
+          onError={(e) => {
+            if (e.currentTarget.src !== fallbackImage) {
+              e.currentTarget.src = fallbackImage;
+            }
+          }}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
 
         <button
           type="button"
@@ -102,7 +123,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
         </button>
 
         <div className="absolute bottom-3 left-4 right-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-extrabold bg-teal-600 text-white px-2.5 py-0.5 rounded-md uppercase tracking-wide">
               {displayCategory}
             </span>
@@ -110,6 +131,11 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
               <span className="text-[10px] font-bold bg-white/90 text-slate-800 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Tag className="w-3 h-3 text-teal-600" />
                 {displayPrice}
+              </span>
+            )}
+            {displayContent?.language === 'en' && (
+              <span className="text-[10px] font-bold bg-sky-500/90 text-white px-2 py-0.5 rounded-md">
+                Wikipedia EN
               </span>
             )}
           </div>
@@ -120,7 +146,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
       </div>
 
       {/* 2. Nội dung chi tiết */}
-      <div className="p-4 flex flex-col gap-3">
+      <div className="p-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
         {isLoading && (
           <div className="h-1 w-full bg-slate-100 overflow-hidden rounded-full">
             <div className="h-full w-1/2 bg-teal-500 animate-pulse rounded-full" />
@@ -129,23 +155,56 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
         {/* Đánh giá & Mô tả */}
         <div className="flex flex-col gap-2 text-xs">
-          {displayRating && (
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-              <span className="text-amber-500 font-extrabold flex items-center gap-1">
-                <Star className="w-3.5 h-3.5 fill-amber-500" /> {displayRating}
+          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+            {hasValidRating ? (
+              <>
+                <span className="text-amber-500 font-extrabold flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 fill-amber-500" />
+                  {Number(displayRating).toFixed(1)}
+                </span>
+                <span className="text-slate-400 font-medium">
+                  {displayReviews
+                    ? `(${displayReviews.toLocaleString('vi-VN')} đánh giá)`
+                    : 'Google Maps Rating'}
+                </span>
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-slate-500 font-semibold">
+                <Star className="w-3.5 h-3.5 text-slate-300" />
+                Chưa có đánh giá
               </span>
-              <span className="text-slate-400 font-medium">
-                {displayReviews
-                  ? `(${displayReviews.toLocaleString('vi-VN')} đánh giá)`
-                  : 'Google Maps Rating'}
-              </span>
-            </div>
-          )}
+            )}
+          </div>
 
           {displayDescription && (
-            <p className="text-slate-600 leading-relaxed line-clamp-2">
+            <p className="text-slate-600 leading-relaxed line-clamp-4">
               {displayDescription}
             </p>
+          )}
+
+          {/* Attribution bản quyền Wikipedia / Wikidata theo chuẩn V2 */}
+          {displayContent && (
+            <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 text-[11px] text-slate-500 space-y-1">
+              <div className="flex items-center gap-1 font-semibold text-teal-700">
+                <BookOpen className="w-3 h-3 shrink-0" />
+                <span>Giới thiệu từ {displayContent.contentSource === 'wikidata' ? 'Wikidata' : 'Wikipedia'}</span>
+              </div>
+              {displayContent.attribution && (
+                <p className="text-[10px] leading-snug text-slate-500 line-clamp-2">
+                  {displayContent.attribution}
+                </p>
+              )}
+              {displayContent.sourceWikiUrl && (
+                <a
+                  href={displayContent.sourceWikiUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-[10px] font-bold text-teal-600 hover:underline"
+                >
+                  Xem bài gốc ({displayContent.license}) →
+                </a>
+              )}
+            </div>
           )}
 
           <div className="flex items-start gap-2 text-slate-600 font-medium pt-0.5">
@@ -209,9 +268,12 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
                   onAddToTrip({
                     ...place,
                     title: displayTitle,
+                    category: rawCategory,
                     address: displayAddress,
-                    rating: displayRating ?? undefined,
+                    rating: displayRating,
                     imageUrl: displayImage,
+                    latitude: lat,
+                    longitude: lng,
                   })
                 }
                 className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
