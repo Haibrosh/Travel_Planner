@@ -202,8 +202,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
                     p.name ILIKE '%' || :q || '%'
                     OR similarity(p.name, :q) >= 0.25
                   )
-              AND (:provinceCode IS NULL OR p.province_code = :provinceCode)
-              AND (:category IS NULL OR p.category = :category)
+              AND (CAST(:provinceCode AS text) IS NULL OR p.province_code = CAST(:provinceCode AS text))
+              AND (CAST(:category AS text) IS NULL OR p.category = CAST(:category AS text))
             ORDER BY
                 (p.name ILIKE :q || '%') DESC,
                 "combinedSearchScore" DESC,
@@ -258,8 +258,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
                     ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
                     :radiusMeters
                   )
-              AND (:category IS NULL OR p.category = :category)
-              AND (:excludePlaceId IS NULL OR p.place_id <> :excludePlaceId)
+              AND (CAST(:category AS text) IS NULL OR p.category = CAST(:category AS text))
+              AND (CAST(:excludePlaceId AS bigint) IS NULL OR p.place_id <> CAST(:excludePlaceId AS bigint))
             ORDER BY
                 r.ranking_score DESC,
                 "distanceMeters" ASC,

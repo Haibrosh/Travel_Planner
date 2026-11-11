@@ -42,7 +42,7 @@ public class PlaceService {
     ) {
         String cleanKeyword = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : null;
         String cleanDestinationId = (destinationId != null && !destinationId.trim().isEmpty()) ? destinationId.trim() : null;
-        String cleanCategory = (category != null && !category.trim().isEmpty()) ? category.trim() : null;
+        String cleanCategory = normalizeCategory(category);
 
         String cleanSort = resolveSortParam(sortParam, pageable);
 
@@ -69,7 +69,7 @@ public class PlaceService {
 
         String cleanQ = q.trim();
         String cleanProvince = (provinceCode != null && !provinceCode.trim().isEmpty()) ? provinceCode.trim() : null;
-        String cleanCategory = (category != null && !category.trim().isEmpty()) ? category.trim() : null;
+        String cleanCategory = normalizeCategory(category);
         int finalLimit = (limit != null && limit > 0) ? Math.min(limit, 30) : 10;
 
         List<PlaceDetailResponse> items = placeRepository.searchPlacesHybrid(cleanQ, cleanProvince, cleanCategory, finalLimit)
@@ -95,7 +95,7 @@ public class PlaceService {
         }
 
         int finalRadius = (radiusMeters != null && radiusMeters > 0) ? Math.min(radiusMeters, 20000) : 2000;
-        String cleanCategory = (category != null && !category.trim().isEmpty()) ? category.trim() : null;
+        String cleanCategory = normalizeCategory(category);
         int finalLimit = (limit != null && limit > 0) ? Math.min(limit, 50) : 15;
 
         List<PlaceDetailResponse> items = placeRepository.findNearbyPlaces(lat, lon, finalRadius, cleanCategory, excludePlaceId, finalLimit)
@@ -160,5 +160,12 @@ public class PlaceService {
 
         // Mặc định: ranking_desc (Điểm xếp hạng cao nhất lên đầu)
         return "ranking_desc";
+    }
+
+    private String normalizeCategory(String category) {
+        if (category == null || category.trim().isEmpty() || "all".equalsIgnoreCase(category.trim())) {
+            return null;
+        }
+        return category.trim();
     }
 }

@@ -104,7 +104,7 @@ public class PlaceDetailResponse {
         }
 
         PlaceRankingResponse ranking = null;
-        if (p.getRankingScore() != null) {
+        if (p.getFormulaVersion() != null) {
             ranking = PlaceRankingResponse.builder()
                     .rankingScore(p.getRankingScore())
                     .subcatPart(p.getSubcatPart())
