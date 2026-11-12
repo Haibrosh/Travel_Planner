@@ -22,5 +22,9 @@ public class DestinationResponse {
     private Double areaKm2;
     private Double centerLat;
     private Double centerLng;
+    private MapCenterResponse center;
+    private BBoxResponse bbox;
+    private Long poiCount;
+    private Long attractionCount;
 }
 

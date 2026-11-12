@@ -1,5 +1,6 @@
 package com.travel.planner.controller;
 
+import com.travel.planner.dto.DestinationRecommendationsResponse;
 import com.travel.planner.dto.DestinationResponse;
 import com.travel.planner.service.DestinationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +32,16 @@ public class DestinationController {
     public ResponseEntity<List<DestinationResponse>> searchDestinations(
             @Parameter() @RequestParam("keyword") String keyword) {
         return ResponseEntity.ok(destinationService.searchDestinations(keyword));
+    }
+
+    @GetMapping("/{slug}/recommendations")
+    @Operation(summary = "Lấy danh sách địa điểm đề xuất cho tỉnh/thành phố", description = "Trả về Top 10-15 địa điểm được xếp hạng cao nhất của tỉnh/thành phố theo category.")
+    public ResponseEntity<DestinationRecommendationsResponse> getRecommendations(
+            @Parameter(description = "Mã tỉnh (VD: '48') hoặc slug (VD: 'da_nang')", example = "da_nang") @PathVariable("slug") String slug,
+            @Parameter(description = "Danh mục ('attraction', 'hotel', 'restaurant', 'cafe', hoặc 'all')", example = "attraction") @RequestParam(value = "category", required = false, defaultValue = "attraction") String category,
+            @Parameter(description = "Số lượng tối đa (mặc định 10, tối đa 50)", example = "10") @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
+            @Parameter(description = "Vị trí bắt đầu", example = "0") @RequestParam(value = "offset", required = false, defaultValue = "0") Integer offset) {
+        return ResponseEntity.ok(destinationService.getRecommendations(slug, category, limit, offset));
     }
 
     @GetMapping("/{slug}")
