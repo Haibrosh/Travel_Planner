@@ -16,7 +16,12 @@ interface ItineraryState {
   setSelectedPlaceId: (placeId: string | null) => void;
   addItem: (dayKey: string, item: ItineraryItem) => void;
   removeItem: (dayKey: string, placeId: string) => void;
-  reorder: (dayKey: string, activeId: string, overId: string) => void; // chưa dùng, làm sau
+  updateItemMeta: (
+    dayKey: string,
+    placeId: string,
+    payload: { startTime?: string | null; endTime?: string | null; note?: string }
+  ) => void;
+  reorder: (dayKey: string, activeId: string, overId: string) => void;
 }
 
 export const useItineraryStore = create<ItineraryState>((set) => ({
@@ -54,6 +59,26 @@ export const useItineraryStore = create<ItineraryState>((set) => ({
         itemsByDay: { ...state.itemsByDay, [dayKey]: current.filter((i) => i.place.id !== placeId) },
         // Xóa đúng địa điểm đang chọn thì bỏ chọn
         selectedPlaceId: state.selectedPlaceId === placeId ? null : state.selectedPlaceId,
+      };
+    }),
+
+  updateItemMeta: (dayKey, placeId, payload) =>
+    set((state) => {
+      const current = state.itemsByDay[dayKey] ?? EMPTY_ITEMS;
+      return {
+        itemsByDay: {
+          ...state.itemsByDay,
+          [dayKey]: current.map((i) =>
+            i.place.id === placeId
+              ? {
+                  ...i,
+                  startTime: payload.startTime !== undefined ? payload.startTime : i.startTime,
+                  endTime: payload.endTime !== undefined ? payload.endTime : i.endTime,
+                  note: payload.note !== undefined ? payload.note : i.note,
+                }
+              : i
+          ),
+        },
       };
     }),
 

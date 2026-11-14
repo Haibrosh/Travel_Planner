@@ -5,5 +5,7 @@ export interface ItineraryItem {
   place: Place;
   tags: string[];
   note?: string;
+  startTime?: string | null;
+  endTime?: string | null;
   imageUrl?: string;
 }

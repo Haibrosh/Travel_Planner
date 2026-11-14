@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
@@ -18,6 +18,10 @@ interface SortableTimelineItemProps {
   onToggleMenu: (placeId: string) => void;
   onCloseMenu: () => void;
   onRemove: (placeId: string) => void;
+  onUpdateMeta?: (
+    placeId: string,
+    payload: { startTime: string | null; endTime: string | null; note: string | null }
+  ) => void;
 }
 
 export default function SortableTimelineItem({
@@ -29,8 +33,10 @@ export default function SortableTimelineItem({
   onToggleMenu,
   onCloseMenu,
   onRemove,
+  onUpdateMeta,
 }: SortableTimelineItemProps) {
-  const { place, tags, note, imageUrl } = item;
+  const { place, tags, note, startTime, endTime, imageUrl } = item;
+  const [isEditing, setIsEditing] = useState(false);
 
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: place.id });
@@ -57,8 +63,12 @@ export default function SortableTimelineItem({
         ⋯
       </button>
       {isMenuOpen && (
-        // TODO: onAddTime / onAddNote làm sau (hiện bấm chỉ đóng menu)
-        <TripActivityPopupMenu onDelete={() => onRemove(place.id)} onClose={onCloseMenu} />
+        <TripActivityPopupMenu
+          onAddTime={() => setIsEditing(true)}
+          onAddNote={() => setIsEditing(true)}
+          onDelete={() => onRemove(place.id)}
+          onClose={onCloseMenu}
+        />
       )}
     </div>
   );
@@ -87,10 +97,18 @@ export default function SortableTimelineItem({
           index={index + 1}
           title={place.name}
           timeRange={getTimeRange(index)}
+          startTime={startTime}
+          endTime={endTime}
           tags={tags}
           note={note}
           imageUrl={imageUrl}
           isSelected={isSelected}
+          isEditing={isEditing}
+          onStartEdit={() => setIsEditing(true)}
+          onCancelEdit={() => setIsEditing(false)}
+          onSaveEdit={
+            onUpdateMeta ? (payload) => onUpdateMeta(place.id, payload) : undefined
+          }
           onClick={() => onSelect(place.id)}
           menuSlot={menu}
         />
