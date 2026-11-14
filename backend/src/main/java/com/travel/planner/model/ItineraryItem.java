@@ -41,6 +41,9 @@ public class ItineraryItem {
     @Column(name = "end_time")
     private LocalTime endTime;
 
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 

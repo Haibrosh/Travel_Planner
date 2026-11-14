@@ -23,6 +23,9 @@ public class UpdateItineraryItemRequest {
     @Schema(description = "Thời gian kết thúc tham quan (HH:mm:ss hoặc HH:mm)", example = "11:30:00")
     private LocalTime endTime;
 
+    @Schema(description = "Ghi chú tham quan cho địa điểm trong lịch trình", example = "Mua vé online trước")
+    private String note;
+
     @Schema(description = "ID của địa điểm liền trước (dùng khi kéo thả đổi vị trí)", example = "3")
     private Long prevItemId;
 
