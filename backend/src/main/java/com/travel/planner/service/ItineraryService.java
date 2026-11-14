@@ -79,13 +79,14 @@ public class ItineraryService {
                 .positionIndex(nextPosition)
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
+                .note(request.getNote() != null && !request.getNote().isBlank() ? request.getNote().trim() : null)
                 .build();
 
         ItineraryItem saved = itineraryItemRepository.save(item);
         return ItineraryItemResponse.fromEntity(saved);
     }
 
-    // Cập nhật thông tin thời gian tham quan (và tùy chọn đổi vị trí nếu có thông tin thứ tự)
+    // Cập nhật thông tin thời gian tham quan, ghi chú (và tùy chọn đổi vị trí nếu có thông tin thứ tự)
     @Transactional
     public ItineraryItemResponse updateItineraryItem(Long tripId, Long itemId, UpdateItineraryItemRequest request, User currentUser) {
         tripSecurityService.getTripIfOwner(tripId, currentUser);
@@ -95,9 +96,15 @@ public class ItineraryService {
 
         validateTimes(request.getStartTime(), request.getEndTime());
 
-        if (request.getStartTime() != null || request.getEndTime() != null) {
+        boolean isReorderOnly = (request.getPrevItemId() != null || request.getNextItemId() != null || request.getOrderIndex() != null)
+                && request.getStartTime() == null && request.getEndTime() == null && request.getNote() == null;
+
+        if (!isReorderOnly) {
             item.setStartTime(request.getStartTime());
             item.setEndTime(request.getEndTime());
+            if (request.getNote() != null) {
+                item.setNote(request.getNote().isBlank() ? null : request.getNote().trim());
+            }
             itineraryItemRepository.save(item);
         }
 

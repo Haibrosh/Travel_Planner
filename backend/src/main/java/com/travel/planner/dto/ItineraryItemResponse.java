@@ -24,6 +24,7 @@ public class ItineraryItemResponse {
     private Double orderIndex;
     private LocalTime startTime;
     private LocalTime endTime;
+    private String note;
     private PlaceDetailResponse place;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -39,6 +40,7 @@ public class ItineraryItemResponse {
                 .orderIndex(item.getPositionIndex())
                 .startTime(item.getStartTime())
                 .endTime(item.getEndTime())
+                .note(item.getNote())
                 .place(PlaceDetailResponse.fromEntity(item.getPlace()))
                 .createdAt(item.getCreatedAt())
                 .updatedAt(item.getUpdatedAt())
