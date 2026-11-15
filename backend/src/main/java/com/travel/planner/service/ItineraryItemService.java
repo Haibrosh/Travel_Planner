@@ -50,6 +50,7 @@ public class ItineraryItemService {
         if (item.getPositionIndex() != null) persisted.setPositionIndex(item.getPositionIndex());
         if (item.getStartTime() != null) persisted.setStartTime(item.getStartTime());
         if (item.getEndTime() != null) persisted.setEndTime(item.getEndTime());
+        if (item.getNote() != null) persisted.setNote(item.getNote());
         if (item.getPlace() != null) persisted.setPlace(item.getPlace());
         if (item.getTrip() != null) persisted.setTrip(item.getTrip());
         return repository.save(persisted);

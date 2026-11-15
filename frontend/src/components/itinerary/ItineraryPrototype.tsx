@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
+  type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -42,6 +43,8 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
   const setSelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
   const addItem = useItineraryStore((s) => s.addItem);
   const removeItem = useItineraryStore((s) => s.removeItem);
+  const updateItemMeta = useItineraryStore((s) => s.updateItemMeta);
+  const reorder = useItineraryStore((s) => s.reorder);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -93,6 +96,12 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
   const handleToggleMenu = (placeId: string) =>
     setOpenMenuId((current) => (current === placeId ? null : placeId));
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorder(activeDayKey, String(active.id), String(over.id));
+  };
+
   // Dropdown gợi ý nằm ở cuối danh sách: cuộn xuống để thấy hết danh sách
   const handleAddBarFocus = () => {
     requestAnimationFrame(() => {
@@ -119,8 +128,12 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
         )}
 
         {/* id cố định để tránh lỗi hydration của dnd-kit (aria-describedby) */}
-        {/* TODO: xử lý đổi thứ tự khi thả (onDragEnd -> reorder) sẽ làm sau */}
-        <DndContext id="itinerary-dnd" sensors={sensors} collisionDetection={closestCenter}>
+        <DndContext
+          id="itinerary-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
           <SortableContext items={items.map((i) => i.place.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-3">
               {items.map((item, index) => (
@@ -134,6 +147,13 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
                   onToggleMenu={handleToggleMenu}
                   onCloseMenu={closeMenu}
                   onRemove={(placeId) => removeItem(activeDayKey, placeId)}
+                  onUpdateMeta={(placeId, payload) =>
+                    updateItemMeta(activeDayKey, placeId, {
+                      startTime: payload.startTime,
+                      endTime: payload.endTime,
+                      note: payload.note ?? undefined,
+                    })
+                  }
                 />
               ))}
             </div>

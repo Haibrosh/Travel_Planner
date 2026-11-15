@@ -225,12 +225,14 @@ class ItineraryServiceTest {
         UpdateItineraryItemRequest request = UpdateItineraryItemRequest.builder()
                 .startTime(LocalTime.of(9, 0))
                 .endTime(LocalTime.of(11, 0))
+                .note("Mua vé trước 1 ngày")
                 .build();
 
         ItineraryItemResponse updated = itineraryService.updateItineraryItem(10L, 7L, request, currentUser);
 
         assertThat(updated.getStartTime()).isEqualTo(LocalTime.of(9, 0));
         assertThat(updated.getEndTime()).isEqualTo(LocalTime.of(11, 0));
+        assertThat(updated.getNote()).isEqualTo("Mua vé trước 1 ngày");
     }
 
     @Test
