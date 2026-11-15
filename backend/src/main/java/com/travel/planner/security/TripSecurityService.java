@@ -2,6 +2,7 @@ package com.travel.planner.security;
 
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
+import com.travel.planner.repository.TripMemberRepository;
 import com.travel.planner.repository.TripRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -10,13 +11,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Chức năng: Kiểm tra quyền sở hữu chuyến đi (Owner) dùng chung cho hệ thống.
+ * Chức năng: Kiểm tra quyền sở hữu (Owner) và quyền thành viên (Member) chuyến đi dùng chung cho hệ thống.
  */
 @Service("tripSecurityService")
 @RequiredArgsConstructor
 public class TripSecurityService {
 
     private final TripRepository tripRepository;
+    private final TripMemberRepository tripMemberRepository;
 
     // Kiểm tra user có phải owner của trip hay không (trả về true/false)
     @Transactional(readOnly = true)
@@ -27,6 +29,16 @@ public class TripSecurityService {
         return tripRepository.existsByTripIdAndOwner_UserId(tripId, userId);
     }
 
+    // Kiểm tra user có phải owner hoặc thành viên ACTIVE của trip hay không
+    @Transactional(readOnly = true)
+    public boolean isMember(Long tripId, Long userId) {
+        if (tripId == null || userId == null) {
+            return false;
+        }
+        return tripRepository.existsByTripIdAndOwner_UserId(tripId, userId)
+                || tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndStatus(tripId, userId, "ACTIVE");
+    }
+
     // Lấy trip nếu user là owner, quăng lỗi 404 nếu không tìm thấy hoặc 403 nếu không có quyền
     @Transactional(readOnly = true)
     public Trip getTripIfOwner(Long tripId, User currentUser) {
@@ -35,6 +47,22 @@ public class TripSecurityService {
 
         if (!trip.getOwner().getUserId().equals(currentUser.getUserId())) {
             throw new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác.");
+        }
+        return trip;
+    }
+
+    // Lấy trip nếu user là owner hoặc thành viên đang ACTIVE, quăng lỗi 404 nếu không tìm thấy hoặc 403 nếu không có quyền
+    @Transactional(readOnly = true)
+    public Trip getTripIfMember(Long tripId, User currentUser) {
+        Trip trip = tripRepository.findByIdWithDetails(tripId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chuyến đi với ID: " + tripId));
+
+        boolean isOwner = trip.getOwner().getUserId().equals(currentUser.getUserId());
+        boolean isActiveMember = tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndStatus(
+                tripId, currentUser.getUserId(), "ACTIVE");
+
+        if (!isOwner && !isActiveMember) {
+            throw new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi này.");
         }
         return trip;
     }
