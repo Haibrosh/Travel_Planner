@@ -2,6 +2,7 @@ package com.travel.planner.service;
 
 import com.travel.planner.dto.CreateItineraryItemRequest;
 import com.travel.planner.dto.ItineraryItemResponse;
+import com.travel.planner.dto.ReorderItemRequest;
 import com.travel.planner.dto.ReorderItineraryItemRequest;
 import com.travel.planner.dto.UpdateItineraryItemRequest;
 import com.travel.planner.model.Destination;
@@ -469,5 +470,180 @@ class ItineraryServiceTest {
         ItineraryItemResponse response = itineraryService.reorderItineraryItem(10L, 5L, request, currentUser);
 
         assertThat(response.getOrderIndex()).isEqualTo(1.5);
+    }
+
+    // ==================== CÁC TEST CASE CHO BATCH REORDER & QUYỀN TRUY CẬP ====================
+
+    @Test
+    @DisplayName("17. Batch reorder đổi thứ tự trong cùng 1 ngày thành công và chuẩn hóa index 1.0, 2.0, 3.0")
+    void reorderItinerary_sameDay_success() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem item2 = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
+        ItineraryItem item3 = ItineraryItem.builder().itemId(3L).trip(trip).place(place).dayNumber(1).positionIndex(3.0).build();
+
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item1, item2, item3));
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(3L).dayNumber(1).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(2.0).build(),
+                ReorderItemRequest.builder().itemId(2L).dayNumber(1).orderIndex(3.0).build()
+        );
+
+        List<ItineraryItemResponse> result = itineraryService.reorderItinerary(10L, requests, currentUser);
+
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(ItineraryItemResponse::getItemId).containsExactly(3L, 1L, 2L);
+        assertThat(result).extracting(ItineraryItemResponse::getOrderIndex).containsExactly(1.0, 2.0, 3.0);
+        verify(itineraryItemRepository, times(1)).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("18. Batch reorder chuyển địa điểm sang ngày khác thành công - chuẩn hóa cả ngày nguồn và ngày đích")
+    void reorderItinerary_crossDay_success() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        // Ngày 1 ban đầu: [1, 2, 3]; Ngày 2 ban đầu: [4]
+        // Chuyển item 2 từ Ngày 1 sang vị trí đầu của Ngày 2 (không truyền item 1, 3 của Ngày 1)
+        ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem item2 = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
+        ItineraryItem item3 = ItineraryItem.builder().itemId(3L).trip(trip).place(place).dayNumber(1).positionIndex(3.0).build();
+        ItineraryItem item4 = ItineraryItem.builder().itemId(4L).trip(trip).place(place).dayNumber(2).positionIndex(1.0).build();
+
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item1, item2, item3, item4));
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(2L).dayNumber(2).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(4L).dayNumber(2).orderIndex(2.0).build()
+        );
+
+        List<ItineraryItemResponse> result = itineraryService.reorderItinerary(10L, requests, currentUser);
+
+        // Ngày 1 còn item 1 (1.0), item 3 (2.0) - không bị lệch index từ 1.0 nhảy lên 3.0
+        // Ngày 2 có item 2 (1.0), item 4 (2.0) - không bị trùng index
+        assertThat(item1.getDayNumber()).isEqualTo(1);
+        assertThat(item1.getPositionIndex()).isEqualTo(1.0);
+        assertThat(item3.getDayNumber()).isEqualTo(1);
+        assertThat(item3.getPositionIndex()).isEqualTo(2.0);
+        assertThat(item2.getDayNumber()).isEqualTo(2);
+        assertThat(item2.getPositionIndex()).isEqualTo(1.0);
+        assertThat(item4.getDayNumber()).isEqualTo(2);
+        assertThat(item4.getPositionIndex()).isEqualTo(2.0);
+
+        assertThat(result).extracting(ItineraryItemResponse::getItemId).containsExactly(1L, 3L, 2L, 4L);
+        assertThat(result).extracting(ItineraryItemResponse::getOrderIndex).containsExactly(1.0, 2.0, 1.0, 2.0);
+        verify(itineraryItemRepository, times(1)).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("19. Batch reorder tự động xử lý orderIndex trùng hoặc lệch thành 1.0, 2.0, 3.0...")
+    void reorderItinerary_duplicateOrSkewedOrderIndex_normalizesIndices() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem item2 = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
+        ItineraryItem item3 = ItineraryItem.builder().itemId(3L).trip(trip).place(place).dayNumber(1).positionIndex(3.0).build();
+
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item1, item2, item3));
+
+        // Client gửi orderIndex trùng (1.0, 1.0) và lệch lớn (99.5)
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(3L).dayNumber(1).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(2L).dayNumber(1).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(99.5).build()
+        );
+
+        List<ItineraryItemResponse> result = itineraryService.reorderItinerary(10L, requests, currentUser);
+
+        assertThat(result).extracting(ItineraryItemResponse::getItemId).containsExactly(3L, 2L, 1L);
+        assertThat(result).extracting(ItineraryItemResponse::getOrderIndex).containsExactly(1.0, 2.0, 3.0);
+    }
+
+    @Test
+    @DisplayName("20. Batch reorder thất bại -> ném AccessDeniedException khi sai quyền truy cập")
+    void reorderItinerary_notOwner_throwsAccessDeniedException() {
+        User outsider = User.builder().userId(99L).email("outsider@travel.com").username("outsider").build();
+        when(tripSecurityService.getTripIfOwner(10L, outsider))
+                .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác."));
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(1.0).build()
+        );
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, requests, outsider))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verifyNoInteractions(itineraryItemRepository);
+    }
+
+    @Test
+    @DisplayName("21. Batch reorder thất bại khi itemId không thuộc về chuyến đi")
+    void reorderItinerary_itemNotInTrip_throwsEntityNotFoundException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item1));
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(999L).dayNumber(1).orderIndex(1.0).build()
+        );
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, requests, currentUser))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("999");
+
+        verify(itineraryItemRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("22. Batch reorder thất bại khi dayNumber vượt quá tổng số ngày chuyến đi")
+    void reorderItinerary_dayNumberExceedsMaxDays_throwsIllegalArgumentException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(10).orderIndex(1.0).build()
+        );
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, requests, currentUser))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("vượt quá tổng số ngày");
+
+        verifyNoInteractions(itineraryItemRepository);
+    }
+
+    @Test
+    @DisplayName("23. Batch reorder thất bại khi danh sách rỗng")
+    void reorderItinerary_emptyRequest_throwsIllegalArgumentException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, List.of(), currentUser))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được để trống");
+
+        verifyNoInteractions(itineraryItemRepository);
+    }
+
+    @Test
+    @DisplayName("24. Các thao tác thêm/sửa/xóa/reorder đơn lẻ đều ném AccessDeniedException khi sai quyền")
+    void singleItemOperations_notOwner_throwsAccessDeniedException() {
+        User outsider = User.builder().userId(99L).email("outsider@travel.com").username("outsider").build();
+        when(tripSecurityService.getTripIfOwner(10L, outsider))
+                .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác."));
+
+        CreateItineraryItemRequest addReq = CreateItineraryItemRequest.builder().placeId(100L).dayNumber(1).build();
+        UpdateItineraryItemRequest updateReq = UpdateItineraryItemRequest.builder().note("hack").build();
+        ReorderItineraryItemRequest reorderReq = ReorderItineraryItemRequest.builder().orderIndex(1.0).build();
+
+        assertThatThrownBy(() -> itineraryService.addItineraryItem(10L, addReq, outsider))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> itineraryService.updateItineraryItem(10L, 1L, updateReq, outsider))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> itineraryService.deleteItineraryItem(10L, 1L, outsider))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 1L, reorderReq, outsider))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verifyNoInteractions(itineraryItemRepository, placeRepository);
     }
 }

@@ -3,11 +3,14 @@ package com.travel.planner.config;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -31,6 +34,34 @@ public class GlobalExceptionHandler {
                 .orElse("Dữ liệu đầu vào không hợp lệ");
         response.put("error", "Validation Error");
         response.put("message", msg);
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    // Bắt lỗi validate từng phần tử khi @RequestBody là danh sách (ví dụ: @Valid List<ReorderItemRequest>)
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodValidation(HandlerMethodValidationException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        String msg = ex.getAllErrors().stream()
+                .map(err -> err instanceof FieldError fieldError
+                        ? fieldError.getField() + ": " + fieldError.getDefaultMessage()
+                        : err.getDefaultMessage())
+                .findFirst()
+                .orElse("Dữ liệu đầu vào không hợp lệ");
+        response.put("error", "Validation Error");
+        response.put("message", msg);
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    // Bắt lỗi body JSON sai định dạng hoặc sai cấu trúc (không parse được)
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleNotReadable(HttpMessageNotReadableException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("error", "Bad Request");
+        response.put("message", "Dữ liệu gửi lên không đúng định dạng JSON hoặc sai cấu trúc.");
         return ResponseEntity.badRequest().body(response);
     }
 
