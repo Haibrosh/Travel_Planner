@@ -54,6 +54,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Công khai các API Auth, API báo lỗi và tài liệu Swagger
                 .requestMatchers("/auth/**", "/error").permitAll()
+                // Cho phép WebSocket handshake không cần JWT HTTP (xác thực ở tầng STOMP)
+                .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 // Công khai API tra cứu điểm đến / tỉnh thành
                 // Mở thêm API địa điểm, chỉ cho GET (API chỉ đọc); map cả /api/v1/** (FE đang gọi) và /api/** (tương thích ngược)
