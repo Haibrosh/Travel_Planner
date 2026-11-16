@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { TripDateFilter } from './TripDateFilter';
+import { ItineraryDayHeader } from './ItineraryDayHeader';
 import { TripActivityCard } from '@/components/cards/TripActivityCard';
 import { AddLocationBar, LocationSuggestion } from './AddLocationBar';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -30,6 +30,9 @@ export interface ItineraryTabProps {
   onUpdateActivity?: (id: string | number, updatedData: { timeRange?: string; note?: string }) => void;
   onDeleteActivity?: (id: string | number) => void;
   onOpenUpdateModal?: (act: any) => void;
+  isFilteredByMap?: boolean;
+  onToggleMapFilter?: () => void;
+  onOptimizeRoute?: () => void;
 }
 
 export const ItineraryTab: React.FC<ItineraryTabProps> = ({
@@ -42,6 +45,9 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
   onUpdateActivity,
   onDeleteActivity,
   onOpenUpdateModal,
+  isFilteredByMap,
+  onToggleMapFilter,
+  onOptimizeRoute,
 }) => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -55,17 +61,25 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-200 pb-8">
-      {/* 1. Bộ lọc ngày */}
-      <TripDateFilter currentDate={currentDate} />
+      {/* 1. Header Ngày */}
+      <ItineraryDayHeader
+        currentDate={currentDate}
+        totalPlaces={activities.length}
+        isFilteredByMap={isFilteredByMap}
+        onToggleMapFilter={onToggleMapFilter}
+        onOptimizeRoute={onOptimizeRoute}
+      />
 
-      {/* 2. Danh sách hoạt động kéo thả */}
+      {/* 2. Danh sách hoạt động tích hợp kéo thả nâng cao */}
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="itinerary-drop-zone">
-          {(provided) => (
+          {(provided, snapshot) => (
             <div
               {...provided.droppableProps}
               ref={provided.innerRef}
-              className="flex flex-col gap-3"
+              className={`flex flex-col gap-3 p-2 rounded-2xl transition-colors duration-200 ${
+                snapshot.isDraggingOver ? 'bg-teal-50/40 border-2 border-dashed border-teal-300/60' : 'border-2 border-transparent'
+              }`}
             >
               {activities.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center bg-slate-50/50">
@@ -80,8 +94,10 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
                         {...provided.draggableProps}
                         style={{
                           ...provided.draggableProps.style,
-                          opacity: snapshot.isDragging ? 0.85 : 1,
                         }}
+                        className={`transition-shadow duration-200 ${
+                          snapshot.isDragging ? 'opacity-95 shadow-2xl rotate-1 scale-102 z-50' : 'opacity-100'
+                        }`}
                       >
                         <TripActivityCard
                           index={idx + 1}
@@ -108,7 +124,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
         </Droppable>
       </DragDropContext>
 
-      {/* 3. Thanh thêm địa điểm */}
+      {/* 3. Thanh thêm địa điểm nhanh */}
       <div className="mt-2">
         <AddLocationBar onSelectLocation={onAddLocation} />
       </div>

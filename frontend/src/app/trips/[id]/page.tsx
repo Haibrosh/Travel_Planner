@@ -27,6 +27,9 @@ export default function TripWorkspacePage({ params }: PageProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { selectedPlace, isModalOpen, openModal } = useMapStore();
 
+  // State quản lý việc lọc bản đồ theo ngày
+  const [isFilteredByMap, setIsFilteredByMap] = useState(false);
+
   const [activities, setActivities] = useState<ItineraryItem[]>([
     {
       id: 1,
@@ -113,7 +116,10 @@ export default function TripWorkspacePage({ params }: PageProps) {
 
   const formattedDateRange = `${formatDateVN(trip.startDate)} - ${formatDateVN(trip.endDate)}`;
 
-  const mapPins: MapPinItem[] = activities.map((act, index) => ({
+  // Xử lý hiển thị ghim trên bản đồ (Có thể lọc nếu bật cờ isFilteredByMap)
+  const displayedActivities = isFilteredByMap ? activities.slice(0, 1) : activities;
+
+  const mapPins: MapPinItem[] = displayedActivities.map((act, index) => ({
     id: act.id,
     index: index + 1,
     title: act.title,
@@ -195,6 +201,14 @@ export default function TripWorkspacePage({ params }: PageProps) {
                     item.id === id ? { ...item, ...updatedData } : item
                   )
                 );
+              }}
+              isFilteredByMap={isFilteredByMap}
+              onToggleMapFilter={() => setIsFilteredByMap((prev) => !prev)}
+              onOptimizeRoute={() => {
+                // Giả lập logic tối ưu lộ trình (đảo ngược hoặc sắp xếp lại danh sách)
+                const optimized = [...activities].reverse();
+                setActivities(optimized);
+                alert('Đã tự động tối ưu hóa lộ trình di chuyển tối ưu nhất cho ngày này!');
               }}
             />
           )}

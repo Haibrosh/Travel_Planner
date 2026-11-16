@@ -72,20 +72,20 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
       {/* 1. Nút 6 chấm kéo thả */}
       <div
         {...dragHandleProps}
-        className="absolute left-0 z-20 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1"
+        className="absolute left-0 z-20 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 transition-colors"
         title="Kéo để sắp xếp"
       >
         <GripVertical className="w-4 h-4" />
       </div>
 
-      {/* 2. Khung Card chính */}
+      {/* 2. Khung Card chính với hiệu ứng bóng mượt mà */}
       <div
         onClick={onClick}
         style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
-        className={`relative w-full rounded-[20px] border bg-white flex items-stretch cursor-pointer transition-all ${
+        className={`relative w-full rounded-[20px] border bg-white flex items-stretch cursor-pointer transition-all duration-200 ${
           isSelected
             ? 'border-teal-500 ring-2 ring-teal-500/20 shadow-md'
-            : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+            : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
         }`}
       >
         {/* Badge số thứ tự đè viền */}
@@ -146,7 +146,7 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
                   e.stopPropagation();
                   setIsEditingTime(true);
                 }}
-                className="hover:text-teal-600 hover:underline cursor-pointer"
+                className="hover:text-teal-600 hover:underline cursor-pointer transition-colors"
                 title="Bấm để chỉnh sửa thời gian"
               >
                 {timeRange}
@@ -159,12 +159,12 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
                   value={tempTime}
                   onChange={(e) => setTempTime(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSaveTime()}
-                  className="bg-slate-50 border border-teal-500 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 outline-none w-full max-w-[200px]"
+                  className="bg-slate-50 border border-teal-500 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 outline-none w-full max-w-[200px] shadow-xs"
                 />
                 <button
                   type="button"
                   onClick={handleSaveTime}
-                  className="p-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 cursor-pointer"
+                  className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shadow-xs"
                 >
                   <Check className="w-3.5 h-3.5" />
                 </button>
@@ -178,7 +178,7 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
                 {tags.map((tag, idx) => (
                   <span
                     key={idx}
-                    className="px-3.5 py-1 rounded-full bg-[#0F766E] text-white text-[11px] font-bold tracking-wide"
+                    className="px-3.5 py-1 rounded-full bg-[#0F766E] text-white text-[11px] font-bold tracking-wide shadow-2xs"
                   >
                     {tag}
                   </span>
@@ -193,10 +193,10 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
                   e.stopPropagation();
                   setIsEditingNote(true);
                 }}
-                className="flex items-center gap-2 text-xs font-medium text-[#64748B] hover:text-teal-600 cursor-pointer group"
+                className="flex items-center gap-2 text-xs font-medium text-[#64748B] hover:text-teal-600 cursor-pointer group transition-colors"
                 title="Bấm để chỉnh sửa ghi chú"
               >
-                <Pencil className="w-3.5 h-3.5 text-[#64748B] group-hover:text-teal-600 shrink-0" />
+                <Pencil className="w-3.5 h-3.5 text-[#64748B] group-hover:text-teal-600 shrink-0 transition-colors" />
                 <span className="truncate">{note || 'Thêm ghi chú...'}</span>
               </div>
             ) : (
@@ -209,12 +209,12 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
                   onChange={(e) => setTempNote(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSaveNote()}
                   placeholder="Nhập ghi chú..."
-                  className="bg-slate-50 border border-teal-500 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 outline-none flex-1"
+                  className="bg-slate-50 border border-teal-500 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 outline-none flex-1 shadow-xs"
                 />
                 <button
                   type="button"
                   onClick={handleSaveNote}
-                  className="p-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 cursor-pointer"
+                  className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shadow-xs"
                 >
                   <Check className="w-3.5 h-3.5" />
                 </button>
@@ -229,7 +229,7 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
             <img
               src={imageUrl}
               alt={title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
           </div>
         )}
