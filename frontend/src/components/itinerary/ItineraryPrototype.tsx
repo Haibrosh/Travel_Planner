@@ -1,22 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { AddLocationBar, type LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
+import { useMemo, useRef } from 'react';
+import type { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
 import { TripDateFilter } from '@/components/trip-workspace/TripDateFilter';
 import { useDayItinerary } from '@/hooks/useDayItinerary';
 import {
@@ -29,8 +14,8 @@ import { useReorderItineraryItem } from '@/hooks/useReorderItineraryItem';
 import { useMapHoverStore } from '@/store/useMapHoverStore';
 import { useMapStore } from '@/store/useMapStore';
 import type { TripResponse } from '@/types/trip';
+import DayColumn, { type ReorderPayload, type UpdateMetaPayload } from './DayColumn';
 import { toTimelineItem } from './ItineraryMappers';
-import SortableTimelineItem from './SortableTimelineItem';
 
 interface ItineraryPrototypeProps {
   trip: Pick<TripResponse, 'tripId' | 'startDate' | 'endDate' | 'provinceCode'>;
@@ -62,23 +47,6 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Chỉ cho mở một menu ⋯ tại một thời điểm
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const closeMenu = useCallback(() => setOpenMenuId(null), []);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  // Click marker trên bản đồ -> cuộn tới thẻ tương ứng
-  useEffect(() => {
-    if (selectedPlaceId == null) return;
-    document
-      .getElementById(`itinerary-card-${selectedPlaceId}`)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [selectedPlaceId]);
-
   const activeDay = days[activeDayNumber - 1];
   if (!activeDay) {
     return <p className="p-5 text-xs text-slate-500">Chuyến đi chưa có ngày hợp lệ.</p>;
@@ -92,21 +60,17 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
   const handleChangeDay = (dayKey: string) => {
     const index = days.findIndex((d) => d.key === dayKey);
     if (index < 0) return;
-    closeMenu();
     setSelectedPlaceId(null);
     setHoveredPlaceId(null);
     setActiveDayNumber(index + 1);
   };
 
   // Chọn địa điểm: thêm vào ngày đang chọn, backend tự xếp ở cuối ngày
-  const handleSelectLocation = (location: LocationSuggestion) => {
+  const handleAddPlace = (location: LocationSuggestion) => {
     const place = placePool.find((p) => String(p.placeId) === location.id);
     if (!place) return;
     addItem.mutate({ placeId: place.placeId, dayNumber: activeDayNumber, placeSnapshot: place });
   };
-
-  const handleToggleMenu = (id: string) =>
-    setOpenMenuId((current) => (current === id ? null : id));
 
   const handleRemove = (id: string) => {
     deleteItem.mutate(Number(id));
@@ -114,10 +78,7 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
     setHoveredPlaceId(null);
   };
 
-  const handleUpdateMeta = (
-    id: string,
-    payload: { startTime: string | null; endTime: string | null; note: string | null }
-  ) => {
+  const handleUpdateMeta = (id: string, payload: UpdateMetaPayload) => {
     updateItem.mutate({
       itemId: Number(id),
       startTime: payload.startTime,
@@ -127,21 +88,12 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
   };
 
   // Kéo thả trong ngày: chỉ báo item liền trước/sau vị trí mới, backend tự tính orderIndex
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return;
-    const ids = timelineItems.map((i) => i.place.id);
-    const from = ids.indexOf(String(active.id));
-    const to = ids.indexOf(String(over.id));
-    if (from < 0 || to < 0) return;
-
-    const reordered = arrayMove(dayItems, from, to);
-    const moved = reordered[to];
-    if (!moved) return;
+  const handleReorder = ({ movedId, prevId, nextId }: ReorderPayload) => {
     reorderItem.mutate({
-      itemId: moved.itemId,
+      itemId: Number(movedId),
       dayNumber: activeDayNumber,
-      prevItemId: reordered[to - 1]?.itemId ?? null,
-      nextItemId: reordered[to + 1]?.itemId ?? null,
+      prevItemId: prevId ? Number(prevId) : null,
+      nextItemId: nextId ? Number(nextId) : null,
     });
   };
 
@@ -166,50 +118,21 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-6">
-        {isLoading && <p className="mb-3 text-xs text-slate-500">Đang tải lịch trình...</p>}
-        {!isLoading && timelineItems.length === 0 && (
-          <p className="mb-3 text-xs text-slate-500">Chưa có địa điểm nào trong ngày này.</p>
-        )}
-
-        {/* id cố định để tránh lỗi hydration của dnd-kit (aria-describedby) */}
-        <DndContext
-          id="itinerary-dnd"
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={timelineItems.map((i) => i.place.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-3">
-              {timelineItems.map((item, index) => (
-                // Bọc ngoài để bắt hover (marker trên bản đồ phóng to) mà không sửa SortableTimelineItem
-                <div
-                  key={item.place.id}
-                  onMouseEnter={() => setHoveredPlaceId(item.place.id)}
-                  onMouseLeave={() => setHoveredPlaceId(null)}
-                >
-                  <SortableTimelineItem
-                    item={item}
-                    index={index}
-                    isSelected={selectedPlaceId != null && String(selectedPlaceId) === item.place.id}
-                    isMenuOpen={openMenuId === item.place.id}
-                    onSelect={setSelectedPlaceId}
-                    onToggleMenu={handleToggleMenu}
-                    onCloseMenu={closeMenu}
-                    onRemove={handleRemove}
-                    onUpdateMeta={handleUpdateMeta}
-                  />
-                </div>
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        <div className="mt-3" onFocusCapture={handleAddBarFocus}>
-          <AddLocationBar suggestions={suggestions} onSelectLocation={handleSelectLocation} />
-        </div>
+        {/* key theo ngày: đổi ngày thì DayColumn khởi tạo lại (đóng menu ⋯, reset DnD) */}
+        <DayColumn
+          key={activeDayNumber}
+          items={timelineItems}
+          isLoading={isLoading}
+          selectedPlaceId={selectedPlaceId}
+          suggestions={suggestions}
+          onSelectPlace={setSelectedPlaceId}
+          onHoverPlace={setHoveredPlaceId}
+          onReorder={handleReorder}
+          onRemove={handleRemove}
+          onUpdateMeta={handleUpdateMeta}
+          onAddPlace={handleAddPlace}
+          onAddBarFocus={handleAddBarFocus}
+        />
       </div>
     </section>
   );
