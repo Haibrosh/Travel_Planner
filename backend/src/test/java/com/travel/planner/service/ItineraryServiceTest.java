@@ -26,6 +26,8 @@ import org.springframework.security.access.AccessDeniedException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -645,5 +647,273 @@ class ItineraryServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
 
         verifyNoInteractions(itineraryItemRepository, placeRepository);
+    }
+
+    // ==================== CÁC TEST CASE BỔ SUNG ĐẠT ĐỘ PHỦ CAO ====================
+
+    @Test
+    @DisplayName("25. Thêm địa điểm thất bại khi không tìm thấy Place -> ném EntityNotFoundException")
+    void addItineraryItem_placeNotFound_throwsEntityNotFoundException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(placeRepository.findById(999L)).thenReturn(Optional.empty());
+
+        CreateItineraryItemRequest request = CreateItineraryItemRequest.builder()
+                .placeId(999L)
+                .dayNumber(1)
+                .build();
+
+        assertThatThrownBy(() -> itineraryService.addItineraryItem(10L, request, currentUser))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("999");
+        verify(itineraryItemRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("26. Thêm địa điểm xử lý trim note hợp lệ và chuyển note toàn khoảng trắng thành null")
+    void addItineraryItem_handlesNoteTrimAndBlank() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
+        when(itineraryItemRepository.findMaxPositionIndexByTripIdAndDayNumber(10L, 1)).thenReturn(Optional.of(1.0));
+        when(itineraryItemRepository.save(any(ItineraryItem.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateItineraryItemRequest withNote = CreateItineraryItemRequest.builder()
+                .placeId(100L)
+                .dayNumber(1)
+                .note("  Đi buổi sáng  ")
+                .build();
+        ItineraryItemResponse res1 = itineraryService.addItineraryItem(10L, withNote, currentUser);
+        assertThat(res1.getNote()).isEqualTo("Đi buổi sáng");
+
+        CreateItineraryItemRequest blankNote = CreateItineraryItemRequest.builder()
+                .placeId(100L)
+                .dayNumber(1)
+                .note("   ")
+                .build();
+        ItineraryItemResponse res2 = itineraryService.addItineraryItem(10L, blankNote, currentUser);
+        assertThat(res2.getNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("27. Cập nhật item thất bại khi không tìm thấy item hoặc endTime < startTime")
+    void updateItineraryItem_notFoundAndInvalidTimes_throwsExceptions() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(999L, 10L)).thenReturn(Optional.empty());
+
+        UpdateItineraryItemRequest req = UpdateItineraryItemRequest.builder().note("test").build();
+        assertThatThrownBy(() -> itineraryService.updateItineraryItem(10L, 999L, req, currentUser))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        ItineraryItem existing = ItineraryItem.builder().itemId(7L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(7L, 10L)).thenReturn(Optional.of(existing));
+
+        UpdateItineraryItemRequest badTimeReq = UpdateItineraryItemRequest.builder()
+                .startTime(LocalTime.of(16, 0))
+                .endTime(LocalTime.of(15, 0))
+                .build();
+        assertThatThrownBy(() -> itineraryService.updateItineraryItem(10L, 7L, badTimeReq, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("28. Cập nhật đồng thời thời gian/xóa note trắng và đổi vị trí orderIndex")
+    void updateItineraryItem_withBlankNoteAndOrderIndex_updatesAndReorders() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem existing = ItineraryItem.builder()
+                .itemId(7L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).note("Ghi chú cũ").build();
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(7L, 10L)).thenReturn(Optional.of(existing));
+        when(itineraryItemRepository.save(any(ItineraryItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(itineraryItemRepository.findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(10L, 1))
+                .thenReturn(List.of(existing));
+
+        UpdateItineraryItemRequest request = UpdateItineraryItemRequest.builder()
+                .startTime(LocalTime.of(9, 0))
+                .endTime(LocalTime.of(10, 0))
+                .note("   ")
+                .orderIndex(3.0)
+                .build();
+
+        ItineraryItemResponse response = itineraryService.updateItineraryItem(10L, 7L, request, currentUser);
+
+        assertThat(response.getNote()).isNull();
+        assertThat(response.getStartTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(response.getOrderIndex()).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("29. Xóa item thất bại khi không tìm thấy itemId thuộc trip")
+    void deleteItineraryItem_notFound_throwsEntityNotFoundException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(itineraryItemRepository.findByItemIdAndTrip_TripId(999L, 10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> itineraryService.deleteItineraryItem(10L, 999L, currentUser))
+                .isInstanceOf(EntityNotFoundException.class);
+        verify(itineraryItemRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("30. Reorder đơn lẻ thất bại khi item không tồn tại hoặc targetDayNumber không hợp lệ")
+    void reorderItineraryItem_invalidItemOrTargetDay_throwsExceptions() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(999L, 10L)).thenReturn(Optional.empty());
+
+        ReorderItineraryItemRequest req = ReorderItineraryItemRequest.builder().orderIndex(1.0).build();
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 999L, req, currentUser))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        ItineraryItem item = ItineraryItem.builder().itemId(5L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(item));
+
+        ReorderItineraryItemRequest zeroDay = ReorderItineraryItemRequest.builder().targetDayNumber(0).build();
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 5L, zeroDay, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        ReorderItineraryItemRequest exceedDay = ReorderItineraryItemRequest.builder().targetDayNumber(10).build();
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 5L, exceedDay, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("31. Reorder với orderIndex quá sát item khác -> kích hoạt rebalanceWithItem")
+    void reorder_directOrderIndex_tooClose_triggersRebalance() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item1 = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem item2 = ItineraryItem.builder().itemId(2L).dayNumber(1).positionIndex(2.0).build();
+        ItineraryItem itemToMove = ItineraryItem.builder().itemId(5L).dayNumber(1).positionIndex(3.0).trip(trip).place(place).build();
+
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(itemToMove));
+        when(itineraryItemRepository.findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(10L, 1))
+                .thenReturn(List.of(item1, item2, itemToMove));
+
+        ReorderItineraryItemRequest request = ReorderItineraryItemRequest.builder()
+                .orderIndex(2.00001)
+                .build();
+
+        ItineraryItemResponse response = itineraryService.reorderItineraryItem(10L, 5L, request, currentUser);
+
+        assertThat(item1.getPositionIndex()).isEqualTo(1.0);
+        assertThat(item2.getPositionIndex()).isEqualTo(2.0);
+        assertThat(response.getOrderIndex()).isEqualTo(3.0);
+        verify(itineraryItemRepository, times(3)).save(any(ItineraryItem.class));
+    }
+
+    @Test
+    @DisplayName("32. Reorder thất bại khi prevItemId hoặc nextItemId không tồn tại")
+    void reorder_missingPrevOrNext_throwsEntityNotFoundException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item = ItineraryItem.builder().itemId(5L).dayNumber(1).positionIndex(1.0).trip(trip).place(place).build();
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(item));
+        when(itineraryItemRepository.findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(10L, 1))
+                .thenReturn(List.of(item));
+
+        when(itineraryItemRepository.findByItemIdAndTrip_TripId(888L, 10L)).thenReturn(Optional.empty());
+        ReorderItineraryItemRequest badPrev = ReorderItineraryItemRequest.builder().prevItemId(888L).build();
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 5L, badPrev, currentUser))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        when(itineraryItemRepository.findByItemIdAndTrip_TripId(1L, 10L))
+                .thenReturn(Optional.of(ItineraryItem.builder().itemId(1L).positionIndex(1.0).build()));
+        when(itineraryItemRepository.findByItemIdAndTrip_TripId(999L, 10L)).thenReturn(Optional.empty());
+        ReorderItineraryItemRequest badNext = ReorderItineraryItemRequest.builder().prevItemId(1L).nextItemId(999L).build();
+        assertThatThrownBy(() -> itineraryService.reorderItineraryItem(10L, 5L, badNext, currentUser))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("33. Reorder với prevItem và nextItem đều null -> gán 1.0 nếu ngày trống, rebalance nếu đã có item khác")
+    void reorder_bothPrevAndNextNull_handlesEmptyAndNonEmptyDay() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem item = ItineraryItem.builder().itemId(5L).dayNumber(2).positionIndex(5.0).trip(trip).place(place).build();
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(item));
+        when(itineraryItemRepository.findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(10L, 2))
+                .thenReturn(List.of());
+
+        ReorderItineraryItemRequest request = ReorderItineraryItemRequest.builder().build();
+        ItineraryItemResponse emptyDayResp = itineraryService.reorderItineraryItem(10L, 5L, request, currentUser);
+        assertThat(emptyDayResp.getOrderIndex()).isEqualTo(1.0);
+
+        ItineraryItem existingOther = ItineraryItem.builder().itemId(6L).dayNumber(2).positionIndex(2.0).build();
+        when(itineraryItemRepository.findByTrip_TripIdAndDayNumberOrderByPositionIndexAsc(10L, 2))
+                .thenReturn(List.of(existingOther, item));
+
+        ItineraryItemResponse nonEmptyDayResp = itineraryService.reorderItineraryItem(10L, 5L, request, currentUser);
+        assertThat(nonEmptyDayResp.getOrderIndex()).isEqualTo(1.0);
+        assertThat(existingOther.getPositionIndex()).isEqualTo(2.0);
+    }
+
+    @Test
+    @DisplayName("34. Batch reorder kiểm tra đầy đủ validate đầu vào không hợp lệ (null, NaN, Infinite, trùng itemId, dayNumber < 1)")
+    void reorderItinerary_invalidInputs_throwsIllegalArgumentException() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, null, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, Collections.singletonList(null), currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> nullItemId = List.of(
+                ReorderItemRequest.builder().itemId(null).dayNumber(1).orderIndex(1.0).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, nullItemId, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> nullOrder = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(null).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, nullOrder, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> nanOrder = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(Double.NaN).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, nanOrder, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> infOrder = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(Double.POSITIVE_INFINITY).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, infOrder, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> duplicateIds = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(2.0).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, duplicateIds, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        List<ReorderItemRequest> invalidDayZero = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(0).orderIndex(1.0).build());
+        assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, invalidDayZero, currentUser))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("35. Batch reorder chuyển item về danh sách chưa xếp ngày (dayNumber = null) và xử lý trùng positionIndex với item ngoài request")
+    void reorderItinerary_unassignedDayAndMixedTieBreaking_success() {
+        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+
+        ItineraryItem itemInReq = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
+        ItineraryItem itemNotInReqA = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem itemNotInReqB = ItineraryItem.builder().itemId(3L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        ItineraryItem itemToPool = ItineraryItem.builder().itemId(4L).trip(trip).place(place).dayNumber(1).positionIndex(3.0).build();
+
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L))
+                .thenReturn(Arrays.asList(itemInReq, itemNotInReqA, itemNotInReqB, itemToPool));
+
+        List<ReorderItemRequest> requests = List.of(
+                ReorderItemRequest.builder().itemId(1L).dayNumber(1).orderIndex(1.0).build(),
+                ReorderItemRequest.builder().itemId(4L).dayNumber(null).orderIndex(1.0).build()
+        );
+
+        List<ItineraryItemResponse> result = itineraryService.reorderItinerary(10L, requests, currentUser);
+
+        // Ngày 1: item 1 (nằm trong request, ưu tiên trước khi trùng positionIndex=1.0), sau đó item 2, item 3 (so sánh theo itemId)
+        assertThat(itemInReq.getPositionIndex()).isEqualTo(1.0);
+        assertThat(itemNotInReqA.getPositionIndex()).isEqualTo(2.0);
+        assertThat(itemNotInReqB.getPositionIndex()).isEqualTo(3.0);
+        assertThat(itemToPool.getDayNumber()).isNull();
+        assertThat(result).hasSize(4);
+        assertThat(result.get(3).getItemId()).isEqualTo(4L);
+        assertThat(result.get(3).getDayNumber()).isNull();
     }
 }

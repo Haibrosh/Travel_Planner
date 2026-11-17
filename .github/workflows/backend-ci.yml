@@ -32,9 +32,13 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      - name: Run Unit Tests & Check Coverage (KPI >= 60%)
+        working-directory: ./backend
+        run: mvn clean test jacoco:report jacoco:check -B
+
       - name: Package with Maven
         working-directory: ./backend
-        run: mvn clean package -DskipTests
+        run: mvn package -DskipTests -B
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
