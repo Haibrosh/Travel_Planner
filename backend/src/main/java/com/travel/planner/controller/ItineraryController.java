@@ -2,6 +2,7 @@ package com.travel.planner.controller;
 
 import com.travel.planner.dto.CreateItineraryItemRequest;
 import com.travel.planner.dto.ItineraryItemResponse;
+import com.travel.planner.dto.ReorderItemRequest;
 import com.travel.planner.dto.ReorderItineraryItemRequest;
 import com.travel.planner.dto.UpdateItineraryItemRequest;
 import com.travel.planner.security.CustomUserDetails;
@@ -91,6 +92,17 @@ public class ItineraryController {
             @RequestBody ReorderItineraryItemRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         ItineraryItemResponse updated = itineraryService.reorderItineraryItem(tripId, itemId, request, currentUser.getUser());
+        return ResponseEntity.ok(updated);
+    }
+
+    // API Cập nhật thứ tự hàng loạt địa điểm trong lịch trình (PUT /api/v1/trips/{tripId}/itinerary/reorder)
+    @PutMapping("/reorder")
+    @Operation(summary = "Cập nhật thứ tự hàng loạt địa điểm trong lịch trình (hỗ trợ đổi thứ tự trong ngày và chuyển sang ngày khác)")
+    public ResponseEntity<List<ItineraryItemResponse>> reorderItinerary(
+            @PathVariable("tripId") Long tripId,
+            @Valid @RequestBody List<ReorderItemRequest> requests,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        List<ItineraryItemResponse> updated = itineraryService.reorderItinerary(tripId, requests, currentUser.getUser());
         return ResponseEntity.ok(updated);
     }
 }

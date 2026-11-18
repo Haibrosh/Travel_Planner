@@ -2,6 +2,7 @@ package com.travel.planner.service;
 
 import com.travel.planner.dto.CreateItineraryItemRequest;
 import com.travel.planner.dto.ItineraryItemResponse;
+import com.travel.planner.dto.ReorderItemRequest;
 import com.travel.planner.dto.ReorderItineraryItemRequest;
 import com.travel.planner.dto.UpdateItineraryItemRequest;
 import com.travel.planner.model.ItineraryItem;
@@ -19,7 +20,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -189,6 +198,125 @@ public class ItineraryService {
         applyMidpointOrRebalance(otherItems, item, prevItem, nextItem);
 
         return ItineraryItemResponse.fromEntity(item);
+    }
+
+    /**
+     * Cập nhật đồng bộ thứ tự hàng loạt địa điểm trong 1 giao dịch DB duy nhất.
+     * Hỗ trợ cả trường hợp đổi thứ tự trong cùng 1 ngày lẫn chuyển địa điểm sang ngày khác,
+     * đồng thời chuẩn hóa lại position_index (1.0, 2.0, 3.0...) trên các ngày bị ảnh hưởng
+     * để đảm bảo không bị trùng hoặc lệch order_index.
+     */
+    @Transactional
+    public List<ItineraryItemResponse> reorderItinerary(
+            Long tripId,
+            List<ReorderItemRequest> requests,
+            User currentUser) {
+        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+
+        if (requests == null || requests.isEmpty()) {
+            throw new IllegalArgumentException("Danh sách địa điểm cần sắp xếp không được để trống.");
+        }
+
+        long totalDays = ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
+        Set<Long> requestedItemIds = new HashSet<>();
+        for (ReorderItemRequest req : requests) {
+            if (req == null) {
+                throw new IllegalArgumentException("Phần tử trong danh sách sắp xếp không được null.");
+            }
+            if (req.getItemId() == null) {
+                throw new IllegalArgumentException("ID mục lịch trình (itemId) không được để trống.");
+            }
+            if (req.getOrderIndex() == null || Double.isNaN(req.getOrderIndex()) || Double.isInfinite(req.getOrderIndex())) {
+                throw new IllegalArgumentException("Thứ tự vị trí (orderIndex) không được để trống hoặc không hợp lệ.");
+            }
+            if (!requestedItemIds.add(req.getItemId())) {
+                throw new IllegalArgumentException("Danh sách sắp xếp bị trùng lặp itemId: " + req.getItemId());
+            }
+            if (req.getDayNumber() != null && (req.getDayNumber() < 1 || req.getDayNumber() > totalDays)) {
+                throw new IllegalArgumentException(String.format(
+                        "Ngày lịch trình mục tiêu (dayNumber = %d) vượt quá tổng số ngày của chuyến đi (%d ngày).",
+                        req.getDayNumber(), totalDays));
+            }
+        }
+
+        List<ItineraryItem> allItems = new ArrayList<>(itineraryItemRepository.findAllByTripIdWithPlace(tripId));
+        Map<Long, ItineraryItem> itemMap = allItems.stream()
+                .collect(Collectors.toMap(ItineraryItem::getItemId, Function.identity()));
+
+        for (ReorderItemRequest req : requests) {
+            if (!itemMap.containsKey(req.getItemId())) {
+                throw new EntityNotFoundException("Không tìm thấy mục lịch trình với ID: " + req.getItemId());
+            }
+        }
+
+        // Lưu lại các ngày bị ảnh hưởng (bao gồm cả ngày nguồn cũ và ngày đích mới) để chuẩn hóa index đồng bộ
+        Set<Integer> affectedDays = new LinkedHashSet<>();
+        Map<Long, Integer> requestOrderMap = new HashMap<>();
+
+        for (int idx = 0; idx < requests.size(); idx++) {
+            ReorderItemRequest req = requests.get(idx);
+            ItineraryItem item = itemMap.get(req.getItemId());
+
+            affectedDays.add(item.getDayNumber());
+            affectedDays.add(req.getDayNumber());
+            requestOrderMap.put(req.getItemId(), idx);
+
+            item.setDayNumber(req.getDayNumber());
+            item.setPositionIndex(req.getOrderIndex());
+        }
+
+        // Chuẩn hóa positionIndex = 1.0, 2.0, 3.0... cho từng ngày bị ảnh hưởng để không bao giờ trùng hoặc lệch
+        for (Integer day : affectedDays) {
+            List<ItineraryItem> dayItems = allItems.stream()
+                    .filter(item -> Objects.equals(item.getDayNumber(), day))
+                    .sorted((a, b) -> compareItemsForRebalance(a, b, requestOrderMap))
+                    .toList();
+
+            for (int i = 0; i < dayItems.size(); i++) {
+                dayItems.get(i).setPositionIndex((double) (i + 1));
+            }
+        }
+
+        itineraryItemRepository.saveAll(allItems);
+
+        allItems.sort(Comparator
+                .comparing(ItineraryItem::getDayNumber, Comparator.nullsLast(Integer::compareTo))
+                .thenComparing(ItineraryItem::getPositionIndex, Comparator.nullsLast(Double::compareTo))
+                .thenComparing(ItineraryItem::getItemId, Comparator.nullsLast(Long::compareTo)));
+
+        return allItems.stream()
+                .map(ItineraryItemResponse::fromEntity)
+                .toList();
+    }
+
+    // So sánh thứ tự item trong cùng một ngày đảm bảo tính bắc cầu (strict weak ordering) khi chuẩn hóa
+    private int compareItemsForRebalance(
+            ItineraryItem a,
+            ItineraryItem b,
+            Map<Long, Integer> requestOrderMap) {
+        double posA = a.getPositionIndex() != null ? a.getPositionIndex() : Double.MAX_VALUE;
+        double posB = b.getPositionIndex() != null ? b.getPositionIndex() : Double.MAX_VALUE;
+        if (posA == 0.0) posA = 0.0;
+        if (posB == 0.0) posB = 0.0;
+
+        int posCmp = Double.compare(posA, posB);
+        if (posCmp != 0) {
+            return posCmp;
+        }
+
+        Integer reqIdxA = requestOrderMap.get(a.getItemId());
+        Integer reqIdxB = requestOrderMap.get(b.getItemId());
+        if (reqIdxA != null && reqIdxB != null) {
+            return Integer.compare(reqIdxA, reqIdxB);
+        }
+        if (reqIdxA != null) {
+            return -1;
+        }
+        if (reqIdxB != null) {
+            return 1;
+        }
+
+        return Comparator.nullsLast(Long::compareTo).compare(a.getItemId(), b.getItemId());
     }
 
     // Áp dụng thuật toán chia đôi hoặc phân bố lại khi đạt giới hạn chia
