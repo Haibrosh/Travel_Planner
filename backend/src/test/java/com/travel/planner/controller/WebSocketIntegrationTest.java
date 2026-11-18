@@ -1,11 +1,16 @@
 package com.travel.planner.controller;
 
 import com.travel.planner.dto.ChatMessage;
+import com.travel.planner.model.User;
+import com.travel.planner.repository.UserRepository;
+import com.travel.planner.security.CustomUserDetails;
+import com.travel.planner.security.JwtService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
@@ -26,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,7 +44,26 @@ class WebSocketIntegrationTest {
     @LocalServerPort
     private int port;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
     private static WebSocketStompClient stompClient;
+    private String jwtToken;
+
+    @BeforeEach
+    void setUp() {
+        User user = userRepository.findAll().stream().findFirst().orElseGet(() -> userRepository.save(
+                User.builder()
+                        .email("websocket_test@sightseeker.com")
+                        .username("WebSocket Test")
+                        .password("$2a$10$abcdefghijk1234567890abcdefghijk1234567890abcdefghijk")
+                        .build()
+        ));
+        jwtToken = jwtService.generateToken(new CustomUserDetails(user));
+    }
 
     @BeforeAll
     static void setupAll() {
@@ -80,11 +105,26 @@ class WebSocketIntegrationTest {
             }
         };
 
-        StompSession session = stompClient.connect(url, new WebSocketHttpHeaders(), handler).get(5, TimeUnit.SECONDS);
+        StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.add("Authorization", "Bearer " + jwtToken);
+        StompSession session = stompClient.connect(
+                url, new WebSocketHttpHeaders(), connectHeaders, handler
+        ).get(5, TimeUnit.SECONDS);
         ChatMessage received = future.get(5, TimeUnit.SECONDS);
         assertNotNull(received);
         assertEquals("tester", received.getSender());
         assertEquals("hello", received.getContent());
         session.disconnect();
+    }
+
+    @Test
+    void testAnonymousConnectionIsRejected() {
+        String url = String.format("ws://localhost:%d/ws", port);
+        StompSessionHandlerAdapter handler = new StompSessionHandlerAdapter() {};
+
+        assertThrows(ExecutionException.class, () ->
+                stompClient.connect(url, new WebSocketHttpHeaders(), handler)
+                        .get(5, TimeUnit.SECONDS)
+        );
     }
 }
