@@ -303,4 +303,105 @@ class TripServiceTest {
 
         verify(tripRepository, never()).delete(any());
     }
+
+    @Test
+    @DisplayName("14. Tạo chuyến đi 1 ngày (startDate == endDate) thành công")
+    void createTrip_sameStartAndEndDate_success() {
+        TripRequest request = new TripRequest();
+        request.setProvinceCode("DN");
+        request.setName("Đà Nẵng trong ngày");
+        request.setStartDate(LocalDate.of(2026, 11, 10));
+        request.setEndDate(LocalDate.of(2026, 11, 10));
+
+        when(destinationRepository.findById("DN")).thenReturn(Optional.of(daNang));
+        when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(invocation -> {
+            Trip toSave = invocation.getArgument(0);
+            toSave.setTripId(11L);
+            return toSave;
+        });
+
+        TripResponse response = tripService.createTrip(request, owner);
+
+        assertThat(response.getTripId()).isEqualTo(11L);
+        assertThat(response.getStartDate()).isEqualTo(LocalDate.of(2026, 11, 10));
+        assertThat(response.getEndDate()).isEqualTo(LocalDate.of(2026, 11, 10));
+    }
+
+    @Test
+    @DisplayName("15. Lấy danh sách chuyến đi khi user chưa có chuyến đi nào -> trả về danh sách rỗng")
+    void getMyTrips_emptyList_returnsEmpty() {
+        when(tripRepository.findAllByOwnerIdWithDetails(1L)).thenReturn(List.of());
+
+        List<TripResponse> result = tripService.getMyTrips(owner);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16. Cập nhật chỉ thay đổi startDate (giữ nguyên endDate) -> tự động điều chỉnh lịch trình")
+    void updateTrip_onlyStartDateChanged_adjustsItinerary() {
+        TripRequest request = new TripRequest();
+        request.setProvinceCode("DN");
+        request.setName("Đà Nẵng rút ngắn ngày đầu");
+        request.setStartDate(LocalDate.of(2026, 11, 12));
+        request.setEndDate(LocalDate.of(2026, 11, 14)); // từ 5 ngày còn 3 ngày
+
+        when(tripSecurityService.getTripIfOwner(10L, owner)).thenReturn(trip);
+        when(tripRepository.saveAndFlush(trip)).thenReturn(trip);
+        when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
+
+        TripResponse response = tripService.updateTrip(10L, request, owner);
+
+        assertThat(response.getStartDate()).isEqualTo(LocalDate.of(2026, 11, 12));
+        verify(itineraryItemRepository).unassignItemsExceedingMaxDays(10L, 3);
+    }
+
+    @Test
+    @DisplayName("17. Cập nhật chuyến đi thất bại khi đổi sang mã tỉnh không tồn tại")
+    void updateTrip_destinationNotFound_throwsEntityNotFoundException() {
+        TripRequest request = new TripRequest();
+        request.setProvinceCode("XX");
+        request.setName("Đổi tỉnh lỗi");
+        request.setStartDate(LocalDate.of(2026, 11, 10));
+        request.setEndDate(LocalDate.of(2026, 11, 14));
+
+        when(tripSecurityService.getTripIfOwner(10L, owner)).thenReturn(trip);
+        when(destinationRepository.findById("XX")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tripService.updateTrip(10L, request, owner))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("XX");
+
+        verify(tripRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("18. Cập nhật chuyến đi thất bại nếu không tải lại được chi tiết chuyến đi sau khi lưu")
+    void updateTrip_reloadedTripNotFound_throwsEntityNotFoundException() {
+        TripRequest request = new TripRequest();
+        request.setProvinceCode("DN");
+        request.setName("Cập nhật");
+        request.setStartDate(LocalDate.of(2026, 11, 10));
+        request.setEndDate(LocalDate.of(2026, 11, 14));
+
+        when(tripSecurityService.getTripIfOwner(10L, owner)).thenReturn(trip);
+        when(tripRepository.saveAndFlush(trip)).thenReturn(trip);
+        when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> tripService.updateTrip(10L, request, owner))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("10");
+    }
+
+    @Test
+    @DisplayName("19. Xóa chuyến đi thất bại khi chuyến đi không tồn tại -> ném EntityNotFoundException")
+    void deleteTrip_notFound_throwsEntityNotFoundException() {
+        when(tripSecurityService.getTripIfOwner(999L, owner))
+                .thenThrow(new EntityNotFoundException("Không tìm thấy chuyến đi với ID: 999"));
+
+        assertThatThrownBy(() -> tripService.deleteTrip(999L, owner))
+                .isInstanceOf(EntityNotFoundException.class);
+
+        verify(tripRepository, never()).delete(any());
+    }
 }
