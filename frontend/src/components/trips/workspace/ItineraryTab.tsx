@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   DndContext,
+  type CollisionDetection,
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
@@ -21,22 +23,22 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  MapPin,
-  Plus,
-  Trash2,
-  Star,
-  Search,
-  Sparkles,
+  AlertCircle,
+  CalendarDays,
   Check,
+  Clock,
   Compass,
   GripVertical,
-  Clock,
-  StickyNote,
+  MapPin,
   Pencil,
-  X,
+  Plus,
   Route,
-  CalendarDays,
-  AlertCircle,
+  Search,
+  Sparkles,
+  Star,
+  StickyNote,
+  Trash2,
+  X,
 } from 'lucide-react';
 import type { TripResponse } from '@/types/trip';
 import type { Place as MapPlace } from '@/types/place';
@@ -55,6 +57,7 @@ import {
   useUpdateItineraryItemMutation,
 } from '@/hooks/useItinerary';
 import { usePlaces } from '@/hooks/usePlaces';
+import { getDayColor } from '@/utils/dayColors';
 import {
   CATEGORY_LABEL_MAP,
   formatRatingLabel,
@@ -73,10 +76,17 @@ const POOL_CATEGORIES = [
   { id: 'hotel', label: 'Khách sạn' },
 ] as const;
 
+// Con trỏ nằm trong chip ngày thì ưu tiên chip, ngược lại dùng closestCenter cho thẻ
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
+};
+
 interface DroppableDayChipProps {
   dayNum: number;
   dateLabel: string;
   count: number;
+  color: string; // màu của ngày, khớp marker và polyline trên bản đồ
   isSelected: boolean;
   onSelect: () => void;
 }
@@ -85,6 +95,7 @@ function DroppableDayChip({
   dayNum,
   dateLabel,
   count,
+  color,
   isSelected,
   onSelect,
 }: DroppableDayChipProps) {
@@ -97,21 +108,31 @@ function DroppableDayChip({
       ref={setNodeRef}
       type="button"
       onClick={onSelect}
+      // Chip đang chọn tô đúng màu ngày; đang kéo thẻ qua thì làm nổi viền
+      style={isSelected && !isOver ? { backgroundColor: color } : undefined}
       className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer tabular-nums ${
         isOver
-          ? 'ring-2 ring-teal-500 bg-teal-50 text-teal-900 scale-[1.03]'
+          ? 'ring-2 ring-teal-500 bg-teal-50 text-teal-900 scale-[1.03] dark:bg-teal-950/40 dark:text-teal-100'
           : isSelected
-            ? 'bg-[#0F766E] text-white shadow-xs'
+            ? 'text-white shadow-xs'
             : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700'
       }`}
     >
+      {/* Chấm màu để nhận biết màu ngày khi chip chưa được chọn */}
+      {!isSelected && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      )}
       <span>
         Ngày {dayNum} ({dateLabel})
       </span>
       {count > 0 && (
         <span
+          style={isSelected ? undefined : { backgroundColor: color }}
           className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-extrabold tabular-nums ${
-            isSelected ? 'bg-white text-[#0F766E]' : 'bg-teal-600 text-white'
+            isSelected ? 'bg-white text-zinc-900' : 'text-white'
           }`}
         >
           {count}
@@ -124,6 +145,7 @@ function DroppableDayChip({
 interface SortableItineraryCardProps {
   item: ItineraryItemResponse;
   idx: number;
+  color: string; // màu của ngày, khớp marker trên bản đồ
   activeDayNum: number;
   daysList: { dayNum: number; dateLabel: string; rawDate: string }[];
   isSelected: boolean;
@@ -141,6 +163,7 @@ interface SortableItineraryCardProps {
 function SortableItineraryCard({
   item,
   idx,
+  color,
   activeDayNum,
   daysList,
   isSelected,
@@ -231,7 +254,7 @@ function SortableItineraryCard({
         isDragging
           ? 'border-teal-600 bg-white shadow-lg ring-2 ring-teal-500/30 opacity-95'
           : isSelected
-            ? 'border-teal-600 bg-teal-50/40 shadow-xs'
+            ? 'border-teal-600 bg-teal-50/40 shadow-xs dark:bg-teal-950/20'
             : 'border-zinc-200 bg-white hover:border-teal-400 hover:shadow-2xs dark:border-zinc-800 dark:bg-zinc-900'
       }`}
     >
@@ -250,7 +273,10 @@ function SortableItineraryCard({
       </button>
 
       {/* Số thứ tự khớp với Marker trên bản đồ */}
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0F766E] text-xs font-extrabold text-white shadow-2xs mt-0.5 tabular-nums">
+      <div
+        style={{ backgroundColor: color }}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-2xs mt-0.5 tabular-nums"
+      >
         {idx + 1}
       </div>
 
@@ -576,6 +602,15 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   }, [daysList, selectedDayNumber, trip.startDate]);
 
   const activeDayNum = activeDay.dayNum;
+  const activeDayColor = getDayColor(activeDayNum);
+
+  // Click marker trên bản đồ -> cuộn tới thẻ tương ứng trong danh sách
+  useEffect(() => {
+    if (selectedPlaceId == null) return;
+    document
+      .getElementById(`workspace-itinerary-card-${selectedPlaceId}`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedPlaceId]);
 
   // 1. Gọi React Query lấy danh sách lịch trình của chuyến đi & các mutation Optimistic Update
   const { data: itineraryItems = [], isLoading: isItineraryLoading } = useItineraryQuery(
@@ -813,7 +848,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
       <DndContext
         id="workspace-itinerary-dnd"
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collisionDetection}
         onDragEnd={handleDragEnd}
       >
         <div className="w-full md:w-[480px] lg:w-[540px] shrink-0 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-y-auto">
@@ -826,6 +861,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
                   dayNum={d.dayNum}
                   dateLabel={d.dateLabel}
                   count={countByDay[d.dayNum] ?? 0}
+                  color={getDayColor(d.dayNum)}
                   isSelected={activeDayNum === d.dayNum}
                   onSelect={() => {
                     setSelectedDayNumber(d.dayNum);
@@ -918,6 +954,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
                         key={item.itemId}
                         item={item}
                         idx={idx}
+                        color={activeDayColor}
                         activeDayNum={activeDayNum}
                         daysList={daysList}
                         isSelected={isSelected}
@@ -1139,7 +1176,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
 
       {/* Cột phải: Bản đồ tương tác (tự động vẽ marker & đường nối theo dayItems của ngày đang chọn) */}
       <div className="hidden md:block flex-1 h-full relative bg-zinc-100 dark:bg-zinc-950">
-        <TripMapLoader places={mapPlaces} />
+        <TripMapLoader places={mapPlaces} dayNumber={activeDayNum} />
       </div>
     </div>
   );
