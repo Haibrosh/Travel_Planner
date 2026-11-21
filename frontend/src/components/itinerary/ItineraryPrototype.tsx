@@ -1,105 +1,100 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import placesData from '@/mocks/places.json';
-import { createMockItem } from '@/mocks/visitMeta';
-import { AddLocationBar, type LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
+import { useMemo, useRef } from 'react';
+import type { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
 import { TripDateFilter } from '@/components/trip-workspace/TripDateFilter';
-import type { Place } from '@/types/place';
+import { useDayItinerary } from '@/hooks/useDayItinerary';
+import {
+  useAddItineraryItemMutation,
+  useDeleteItineraryItemMutation,
+  useUpdateItineraryItemMutation,
+} from '@/hooks/useItinerary';
+import { usePlaces } from '@/hooks/usePlaces';
+import { useReorderItineraryItem } from '@/hooks/useReorderItineraryItem';
+import { useMapHoverStore } from '@/store/useMapHoverStore';
+import { useMapStore } from '@/store/useMapStore';
 import type { TripResponse } from '@/types/trip';
-import { EMPTY_ITEMS, useItineraryStore } from '@/store/useItineraryStore';
-import { getCategoryLabel } from '@/utils/placeCategory';
-import { getTripDays } from '@/utils/tripDays';
-import SortableTimelineItem from './SortableTimelineItem';
-
-// Nguồn gợi ý mock; sau này thay bằng API /places/search
-const ALL_PLACES: Place[] = placesData;
+import DayColumn, { type ReorderPayload, type UpdateMetaPayload } from './DayColumn';
+import { toTimelineItem } from './ItineraryMappers';
 
 interface ItineraryPrototypeProps {
-  trip: Pick<TripResponse, 'tripId' | 'startDate' | 'endDate'>;
+  trip: Pick<TripResponse, 'tripId' | 'startDate' | 'endDate' | 'provinceCode'>;
 }
 
 export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
-  const days = useMemo(() => getTripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate]);
+  const { days, activeDayNumber, setActiveDayNumber, dayItems, isLoading } = useDayItinerary(trip);
 
-  const selectedDayKey = useItineraryStore((s) => s.selectedDayKey);
-  const selectedPlaceId = useItineraryStore((s) => s.selectedPlaceId);
-  const initTrip = useItineraryStore((s) => s.initTrip);
-  const setSelectedDayKey = useItineraryStore((s) => s.setSelectedDayKey);
-  const setSelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
-  const addItem = useItineraryStore((s) => s.addItem);
-  const removeItem = useItineraryStore((s) => s.removeItem);
-  const updateItemMeta = useItineraryStore((s) => s.updateItemMeta);
-  const reorder = useItineraryStore((s) => s.reorder);
+  // Chọn thẻ và hover dùng chung store với bản đồ
+  const selectedPlaceId = useMapStore((s) => s.selectedPlaceId);
+  const setSelectedPlaceId = useMapStore((s) => s.setSelectedPlaceId);
+  const setHoveredPlaceId = useMapHoverStore((s) => s.setHoveredPlaceId);
+
+  const addItem = useAddItineraryItemMutation(trip.tripId);
+  const deleteItem = useDeleteItineraryItemMutation(trip.tripId);
+  const updateItem = useUpdateItineraryItemMutation(trip.tripId);
+  const reorderItem = useReorderItineraryItem(trip.tripId);
+
+  // Gợi ý địa điểm theo tỉnh của chuyến đi; AddLocationBar tự lọc theo từ khóa gõ vào
+  const { data: placesPage } = usePlaces({
+    destinationId: trip.provinceCode,
+    sort: 'popular',
+    page: 1,
+    size: 50,
+  });
+  const placePool = useMemo(() => placesPage?.content ?? [], [placesPage]);
+
+  const timelineItems = useMemo(() => dayItems.map(toTimelineItem), [dayItems]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Chỉ cho mở một menu ⋯ tại một thời điểm
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const closeMenu = useCallback(() => setOpenMenuId(null), []);
-
-  // Ngày đang hiển thị (fallback về ngày đầu trước khi store được khởi tạo)
-  const activeDay = days.find((d) => d.key === selectedDayKey) ?? days[0];
-  const activeDayKey = activeDay?.key ?? '';
-  const items = useItineraryStore((s) => s.itemsByDay[activeDayKey] ?? EMPTY_ITEMS);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  useEffect(() => {
-    if (days.length > 0) initTrip(String(trip.tripId), days[0].key);
-  }, [trip.tripId, days, initTrip]);
-
-  // Click marker trên bản đồ -> cuộn tới thẻ tương ứng
-  useEffect(() => {
-    if (selectedPlaceId == null) return;
-    document
-      .getElementById(`itinerary-card-${selectedPlaceId}`)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [selectedPlaceId]);
-
+  const activeDay = days[activeDayNumber - 1];
   if (!activeDay) {
     return <p className="p-5 text-xs text-slate-500">Chuyến đi chưa có ngày hợp lệ.</p>;
   }
 
-  // Gợi ý: các địa điểm chưa có trong ngày; address tạm hiển thị category
-  const suggestions: LocationSuggestion[] = ALL_PLACES.filter(
-    (p) => !items.some((i) => i.place.id === p.id)
-  ).map((p) => ({ id: p.id, name: p.name, address: getCategoryLabel(p.category) }));
+  // Gợi ý: các địa điểm chưa có trong ngày đang chọn
+  const suggestions: LocationSuggestion[] = placePool
+    .filter((p) => !dayItems.some((i) => i.placeId === p.placeId))
+    .map((p) => ({ id: String(p.placeId), name: p.name, address: p.address }));
 
   const handleChangeDay = (dayKey: string) => {
-    closeMenu();
-    setSelectedDayKey(dayKey);
+    const index = days.findIndex((d) => d.key === dayKey);
+    if (index < 0) return;
+    setSelectedPlaceId(null);
+    setHoveredPlaceId(null);
+    setActiveDayNumber(index + 1);
   };
 
-  const handleSelectLocation = (location: LocationSuggestion) => {
-    const place = ALL_PLACES.find((p) => p.id === location.id);
-    if (place) addItem(activeDayKey, createMockItem(place));
+  // Chọn địa điểm: thêm vào ngày đang chọn, backend tự xếp ở cuối ngày
+  const handleAddPlace = (location: LocationSuggestion) => {
+    const place = placePool.find((p) => String(p.placeId) === location.id);
+    if (!place) return;
+    addItem.mutate({ placeId: place.placeId, dayNumber: activeDayNumber, placeSnapshot: place });
   };
 
-  const handleToggleMenu = (placeId: string) =>
-    setOpenMenuId((current) => (current === placeId ? null : placeId));
+  const handleRemove = (id: string) => {
+    deleteItem.mutate(Number(id));
+    if (selectedPlaceId != null && String(selectedPlaceId) === id) setSelectedPlaceId(null);
+    setHoveredPlaceId(null);
+  };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    reorder(activeDayKey, String(active.id), String(over.id));
+  const handleUpdateMeta = (id: string, payload: UpdateMetaPayload) => {
+    updateItem.mutate({
+      itemId: Number(id),
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      note: payload.note,
+    });
+  };
+
+  // Kéo thả trong ngày: chỉ báo item liền trước/sau vị trí mới, backend tự tính orderIndex
+  const handleReorder = ({ movedId, prevId, nextId }: ReorderPayload) => {
+    reorderItem.mutate({
+      itemId: Number(movedId),
+      dayNumber: activeDayNumber,
+      prevItemId: prevId ? Number(prevId) : null,
+      nextItemId: nextId ? Number(nextId) : null,
+    });
   };
 
   // Dropdown gợi ý nằm ở cuối danh sách: cuộn xuống để thấy hết danh sách
@@ -123,46 +118,21 @@ export default function ItineraryPrototype({ trip }: ItineraryPrototypeProps) {
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-6">
-        {items.length === 0 && (
-          <p className="mb-3 text-xs text-slate-500">Chưa có địa điểm nào trong ngày này.</p>
-        )}
-
-        {/* id cố định để tránh lỗi hydration của dnd-kit (aria-describedby) */}
-        <DndContext
-          id="itinerary-dnd"
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={items.map((i) => i.place.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-3">
-              {items.map((item, index) => (
-                <SortableTimelineItem
-                  key={item.place.id}
-                  item={item}
-                  index={index}
-                  isSelected={selectedPlaceId === item.place.id}
-                  isMenuOpen={openMenuId === item.place.id}
-                  onSelect={setSelectedPlaceId}
-                  onToggleMenu={handleToggleMenu}
-                  onCloseMenu={closeMenu}
-                  onRemove={(placeId) => removeItem(activeDayKey, placeId)}
-                  onUpdateMeta={(placeId, payload) =>
-                    updateItemMeta(activeDayKey, placeId, {
-                      startTime: payload.startTime,
-                      endTime: payload.endTime,
-                      note: payload.note ?? undefined,
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        <div className="mt-3" onFocusCapture={handleAddBarFocus}>
-          <AddLocationBar suggestions={suggestions} onSelectLocation={handleSelectLocation} />
-        </div>
+        {/* key theo ngày: đổi ngày thì DayColumn khởi tạo lại (đóng menu ⋯, reset DnD) */}
+        <DayColumn
+          key={activeDayNumber}
+          items={timelineItems}
+          isLoading={isLoading}
+          selectedPlaceId={selectedPlaceId}
+          suggestions={suggestions}
+          onSelectPlace={setSelectedPlaceId}
+          onHoverPlace={setHoveredPlaceId}
+          onReorder={handleReorder}
+          onRemove={handleRemove}
+          onUpdateMeta={handleUpdateMeta}
+          onAddPlace={handleAddPlace}
+          onAddBarFocus={handleAddBarFocus}
+        />
       </div>
     </section>
   );

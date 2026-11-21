@@ -14,8 +14,9 @@ const TripMap = dynamic(() => import("./TripMap"), {
 
 interface TripMapLoaderProps {
   places?: Place[];
+  dayNumber?: number;
 }
 
-export default function TripMapLoader({ places }: TripMapLoaderProps) {
-  return <TripMap places={places} />;
+export default function TripMapLoader({ places, dayNumber }: TripMapLoaderProps) {
+  return <TripMap places={places} dayNumber={dayNumber} />;
 }

@@ -1,8 +1,8 @@
 import ItineraryPrototype from '@/components/itinerary/ItineraryPrototype';
-import TripMapLoader from '@/components/map/TripMapLoader';
+import ItineraryMap from '@/components/itinerary/ItineraryMap';
 
-// Trip giả để chạy thử, khớp trip số 1 trong MSW
-const MOCK_TRIP = { tripId: 1, startDate: '2026-11-14', endDate: '2026-11-16' };
+// Trip để chạy thử. Chạy với backend thật thì đổi thành chuyến đi có thật của tài khoản đang đăng nhập
+const MOCK_TRIP = { tripId: 1, startDate: '2026-11-14', endDate: '2026-11-16', provinceCode: '77' };
 
 export default function ItinerarySpikePage() {
   return (
@@ -11,7 +11,7 @@ export default function ItinerarySpikePage() {
         <ItineraryPrototype trip={MOCK_TRIP} />
       </div>
       <div className="relative z-0 h-full flex-1">
-        <TripMapLoader />
+        <ItineraryMap trip={MOCK_TRIP} />
       </div>
     </main>
   );
