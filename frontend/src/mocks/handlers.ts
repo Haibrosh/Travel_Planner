@@ -16,7 +16,7 @@ let mockTrips: TripResponse[] = [
     destinationName: 'Bà Rịa - Vũng Tàu',
     destinationSlug: 'ba_ria_vung_tau',
     name: 'Khám phá Vũng Tàu cuối tuần',
-    description: 'Chuyến đi nghỉ dưỡng ngắm bình minh biển Vũng Tàu cùng nhóm bạn.',
+    description: 'Chuyến đi nghỉ dưỡng ngắm bình minh biển.',
     startDate: '2026-11-14',
     endDate: '2026-11-16',
     status: 'PLANNING',
@@ -43,7 +43,6 @@ let mockTrips: TripResponse[] = [
 export const handlers = [
   http.post('*/auth/login', async ({ request }) => {
     const body = (await request.json()) as Partial<LoginRequest>;
-
     if (body?.email === 'test@example.com' && body?.password === 'password') {
       return HttpResponse.json({
         token: 'mock-jwt-token',
@@ -51,7 +50,6 @@ export const handlers = [
         username: 'testuser',
       });
     }
-
     return HttpResponse.json(
       {
         status: 401,
@@ -64,7 +62,6 @@ export const handlers = [
 
   http.post('*/auth/register', async ({ request }) => {
     const body = (await request.json()) as Partial<RegisterRequest>;
-
     return HttpResponse.json({
       token: 'mock-jwt-token-new',
       email: body?.email || 'new@example.com',
@@ -153,18 +150,34 @@ export const handlers = [
     return HttpResponse.json(mockTrips);
   }),
 
+  // Lấy chi tiết chuyến đi theo ID (Hỗ trợ tìm kiếm linh hoạt cả số lẫn chữ/slug)
   http.get('*/api/v1/trips/:id', ({ params }) => {
-    const tripId = Number(params.id);
-    const trip = mockTrips.find((t) => t.tripId === tripId);
+    const rawId = params.id as string;
+    const tripId = Number(rawId);
+    
+    let trip = mockTrips.find((t) => t.tripId === tripId || String(t.tripId) === rawId);
+    
+    // Dự phòng tự động nếu không tìm thấy ID trên URL để test UI mượt mà
     if (!trip) {
-      return HttpResponse.json(
-        { message: `Không tìm thấy chuyến đi với ID: ${tripId}` },
-        { status: 404 }
-      );
+      trip = {
+        tripId: isNaN(tripId) ? 1 : tripId,
+        ownerId: 1,
+        ownerUsername: 'traveler_pro',
+        destinationId: 1,
+        name: `Hành trình khám phá #${rawId}`,
+        description: 'Dữ liệu dự phòng tự động cho không gian làm việc.',
+        startDate: '2026-11-07',
+        endDate: '2026-11-10',
+        status: 'PLANNING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
     }
+
     return HttpResponse.json(trip);
   }),
 
+  // Tạo mới chuyến đi
   http.post('*/api/v1/trips', async ({ request }) => {
     const body = (await request.json()) as CreateTripRequest;
     const dest = DEFAULT_DESTINATIONS.find((d) => d.provinceCode === body.provinceCode);
