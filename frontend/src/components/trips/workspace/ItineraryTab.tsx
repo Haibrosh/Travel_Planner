@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   DndContext,
+  DragOverlay,
   type CollisionDetection,
   type DragEndEvent,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -252,7 +254,7 @@ function SortableItineraryCard({
       onMouseLeave={() => onHoverPlace(null)}
       className={`group relative flex items-start gap-2.5 rounded-2xl border p-3.5 transition-all cursor-pointer ${
         isDragging
-          ? 'border-teal-600 bg-white shadow-lg ring-2 ring-teal-500/30 opacity-95'
+          ? 'border-teal-500/70 bg-teal-50/30 opacity-40'
           : isSelected
             ? 'border-teal-600 bg-teal-50/40 shadow-xs dark:bg-teal-950/20'
             : 'border-zinc-200 bg-white hover:border-teal-400 hover:shadow-2xs dark:border-zinc-800 dark:bg-zinc-900'
@@ -548,6 +550,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   const [poolSearch, setPoolSearch] = useState('');
   const [debouncedPoolSearch, setDebouncedPoolSearch] = useState('');
   const [poolCategory, setPoolCategory] = useState<string>('all');
+  const [activeDragItemId, setActiveDragItemId] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -642,6 +645,13 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
         .sort((a, b) => a.positionIndex - b.positionIndex),
     [itineraryItems, activeDayNum]
   );
+
+  const activeDragEntry = useMemo(() => {
+    if (activeDragItemId === null) return null;
+    const idx = dayItems.findIndex((i) => i.itemId === activeDragItemId);
+    if (idx < 0) return null;
+    return { item: dayItems[idx], idx };
+  }, [activeDragItemId, dayItems]);
 
   const unassignedPoolItems = useMemo(
     () => itineraryItems.filter((item) => item.dayNumber === null),
@@ -743,6 +753,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
 
   // Xử lý kéo thả đổi vị trí địa điểm (Optimistic Update: 0ms không nháy, lỗi mới rollback)
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragItemId(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -849,7 +860,9 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
         id="workspace-itinerary-dnd"
         sensors={sensors}
         collisionDetection={collisionDetection}
+        onDragStart={(e: DragStartEvent) => setActiveDragItemId(Number(e.active.id))}
         onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveDragItemId(null)}
       >
         <div className="w-full md:w-[480px] lg:w-[540px] shrink-0 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-y-auto">
           {/* Day Selector Chips (Lưu trạng thái vào useTripUiStore.selectedDayNumber + nhận kéo thả đổi ngày) */}
@@ -943,7 +956,13 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
                 items={dayItems.map((item) => item.itemId)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-3">
+                <div
+                  className={`space-y-3 transition-all ${
+                    activeDragItemId !== null
+                      ? 'rounded-2xl bg-teal-50/30 ring-1 ring-dashed ring-teal-400/60 p-1.5 -m-1.5'
+                      : ''
+                  }`}
+                >
                   {dayItems.map((item, idx) => {
                     const isSelected =
                       selectedPlaceId !== null &&
@@ -1172,6 +1191,39 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
             </div>
           </div>
         </div>
+
+        <DragOverlay dropAnimation={{ duration: 180, easing: 'ease-out' }}>
+          {activeDragEntry ? (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-teal-500 bg-white p-3.5 shadow-2xl ring-2 ring-teal-500/30 rotate-1 scale-[1.02] cursor-grabbing">
+              <div
+                style={{ backgroundColor: activeDayColor }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-2xs mt-0.5 tabular-nums"
+              >
+                {activeDragEntry.idx + 1}
+              </div>
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
+                <img
+                  src={
+                    activeDragEntry.item.place.photoUrl ||
+                    getPlaceFallbackImage(activeDragEntry.item.place.category)
+                  }
+                  alt={activeDragEntry.item.place.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-extrabold text-zinc-900 truncate">
+                  {activeDragEntry.item.place.name}
+                </p>
+                <span className="mt-1 inline-block rounded-md bg-teal-50 px-2 py-0.5 text-[11px] font-bold text-teal-700">
+                  {CATEGORY_LABEL_MAP[activeDragEntry.item.place.category] ||
+                    activeDragEntry.item.place.subcategory ||
+                    'Điểm tham quan'}
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       {/* Cột phải: Bản đồ tương tác (tự động vẽ marker & đường nối theo dayItems của ngày đang chọn) */}
