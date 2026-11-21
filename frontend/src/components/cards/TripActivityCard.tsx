@@ -1,36 +1,38 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Clock, FileText, Pencil, Check, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Clock, Pencil, MoreHorizontal, GripVertical, Check } from 'lucide-react';
+import { TripActivityPopupMenu } from './TripActivityPopupMenu';
 
 export interface TripActivityCardProps {
   index: number;
   title: string;
   timeRange: string;
-  startTime?: string | null;
-  endTime?: string | null;
   tags?: string[];
   note?: string | null;
   imageUrl?: string;
   isSelected?: boolean;
   onClick?: () => void;
+  // Props tương thích với nhánh main (API / menuSlot / inline edit)
   menuSlot?: React.ReactNode;
   isEditing?: boolean;
   onStartEdit?: () => void;
-  onCancelEdit?: () => void;
   onSaveEdit?: (data: {
     startTime: string | null;
     endTime: string | null;
     note: string | null;
   }) => void;
+  // Props UI & kéo thả
+  onOpenUpdateModal?: () => void;
+  onUpdateActivity?: (updatedData: { timeRange?: string; note?: string }) => void;
+  onDeleteActivity?: () => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 
 export const TripActivityCard: React.FC<TripActivityCardProps> = ({
   index,
   title,
   timeRange,
-  startTime,
-  endTime,
   tags = [],
   note,
   imageUrl,
@@ -39,186 +41,244 @@ export const TripActivityCard: React.FC<TripActivityCardProps> = ({
   menuSlot,
   isEditing: controlledEditing,
   onStartEdit,
-  onCancelEdit,
   onSaveEdit,
+  onOpenUpdateModal,
+  onUpdateActivity,
+  onDeleteActivity,
+  dragHandleProps,
 }) => {
-  const [internalEditing, setInternalEditing] = useState(false);
-  const isEditing = controlledEditing ?? internalEditing;
+  const [showMenu, setShowMenu] = useState(false);
 
-  const [draftStart, setDraftStart] = useState(startTime ?? '');
-  const [draftEnd, setDraftEnd] = useState(endTime ?? '');
-  const [draftNote, setDraftNote] = useState(note ?? '');
-  const [timeError, setTimeError] = useState<string | null>(null);
+  // Chỉnh sửa trực tiếp thời gian & ghi chú
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [tempTime, setTempTime] = useState(timeRange);
 
-  const openEditor = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDraftStart(startTime ?? '');
-    setDraftEnd(endTime ?? '');
-    setDraftNote(note ?? '');
-    setTimeError(null);
-    if (onStartEdit) onStartEdit();
-    else setInternalEditing(true);
-  };
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [tempNote, setTempNote] = useState(note || '');
 
-  const closeEditor = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setTimeError(null);
-    if (onCancelEdit) onCancelEdit();
-    else setInternalEditing(false);
-  };
+  const timeInputRef = useRef<HTMLInputElement>(null);
+  const noteInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (draftStart && draftEnd && draftEnd < draftStart) {
-      setTimeError('Giờ kết thúc phải lớn hơn hoặc bằng giờ bắt đầu.');
-      return;
+  useEffect(() => {
+    setTempTime(timeRange);
+  }, [timeRange]);
+
+  useEffect(() => {
+    setTempNote(note || '');
+  }, [note]);
+
+  useEffect(() => {
+    if (isEditingTime) timeInputRef.current?.focus();
+  }, [isEditingTime]);
+
+  useEffect(() => {
+    if (isEditingNote || controlledEditing) noteInputRef.current?.focus();
+  }, [isEditingNote, controlledEditing]);
+
+  const handleSaveTime = () => {
+    setIsEditingTime(false);
+    const nextTime = tempTime.trim();
+    if (nextTime !== timeRange) {
+      onUpdateActivity?.({ timeRange: nextTime });
     }
-    setTimeError(null);
-    onSaveEdit?.({
-      startTime: draftStart.trim() ? draftStart.trim() : null,
-      endTime: draftEnd.trim() ? draftEnd.trim() : null,
-      note: draftNote.trim() ? draftNote.trim() : null,
-    });
-    if (onCancelEdit) onCancelEdit();
-    else setInternalEditing(false);
   };
+
+  const handleSaveNote = () => {
+    setIsEditingNote(false);
+    const nextNote = tempNote.trim();
+    if (nextNote !== (note || '')) {
+      onUpdateActivity?.({ note: nextNote });
+      onSaveEdit?.({
+        startTime: null,
+        endTime: null,
+        note: nextNote || null,
+      });
+    }
+  };
+
+  const showNoteEditor = Boolean(isEditingNote || controlledEditing);
 
   return (
-    <div
-      onClick={onClick}
-      style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
-      className={`w-full bg-white rounded-2xl border p-4 flex flex-col gap-3 cursor-pointer transition-colors ${
-        isSelected
-          ? 'border-[#0F766E] bg-teal-50/20'
-          : 'border-slate-200 hover:border-slate-300'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          {/* Số thứ tự badge */}
-          <div className="w-7 h-7 rounded-full bg-[#0F766E] text-white text-xs font-extrabold flex items-center justify-center shrink-0">
-            {index}
-          </div>
+    <div className="relative flex items-center w-full my-3 pl-8 overflow-visible">
+      {/* 1. Nút 6 chấm kéo thả */}
+      <div
+        {...dragHandleProps}
+        className="absolute left-0 z-20 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 transition-colors"
+        title="Kéo để sắp xếp"
+      >
+        <GripVertical className="w-4 h-4" />
+      </div>
 
-          <div className="flex flex-col gap-1 min-w-0">
-            <h4 className="text-sm font-extrabold text-slate-900 truncate">
+      {/* 2. Khung Card chính */}
+      <div
+        onClick={onClick}
+        style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+        className={`relative w-full rounded-[20px] border bg-white flex items-stretch cursor-pointer transition-all duration-200 ${
+          isSelected
+            ? 'border-teal-500 ring-2 ring-teal-500/20 shadow-md'
+            : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+        }`}
+      >
+        {/* Badge số thứ tự đè viền */}
+        <div className="absolute -left-3.5 top-6 z-30 w-7 h-7 rounded-full bg-[#0D9488] text-white text-xs font-extrabold flex items-center justify-center shadow-md border-2 border-white">
+          {index}
+        </div>
+
+        {/* Nội dung thông tin bên trái */}
+        <div className="flex-1 p-5 pl-6 flex flex-col justify-between min-w-0">
+          <div className="flex items-start justify-between gap-3 relative">
+            <h4 className="text-[17px] font-extrabold text-[#0F172A] tracking-tight truncate">
               {title}
             </h4>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-              <Clock className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-              <span>{timeRange}</span>
-              {onSaveEdit && !isEditing && (
+
+            {/* Menu slot từ main hoặc popup menu */}
+            {menuSlot ? (
+              <div onClick={(e) => e.stopPropagation()} className="z-30 shrink-0">
+                {menuSlot}
+              </div>
+            ) : (
+              <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={openEditor}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu((prev) => !prev);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer z-30"
+                  title="Tùy chọn"
                 >
-                  <Pencil className="w-3 h-3" />
-                  <span>Sửa giờ & ghi chú</span>
+                  <MoreHorizontal className="w-5 h-5" />
                 </button>
-              )}
-            </div>
+
+                {showMenu && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <TripActivityPopupMenu
+                      onClose={() => setShowMenu(false)}
+                      onAddTime={() => {
+                        setShowMenu(false);
+                        setIsEditingTime(true);
+                      }}
+                      onAddNote={() => {
+                        setShowMenu(false);
+                        setIsEditingNote(true);
+                        onStartEdit?.();
+                      }}
+                      onDelete={() => {
+                        setShowMenu(false);
+                        onDeleteActivity?.();
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Dòng Thời gian */}
+          <div className="flex items-center gap-2 text-xs font-bold text-[#64748B] mt-1.5">
+            <Clock className="w-3.5 h-3.5 text-[#14B8A6] shrink-0" />
+            {!isEditingTime ? (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingTime(true);
+                }}
+                className="hover:text-teal-600 hover:underline cursor-pointer transition-colors"
+                title="Bấm để chỉnh sửa thời gian"
+              >
+                {timeRange}
+              </span>
+            ) : (
+              <div
+                className="flex items-center gap-1.5 flex-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  ref={timeInputRef}
+                  type="text"
+                  value={tempTime}
+                  onChange={(e) => setTempTime(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveTime()}
+                  className="bg-slate-50 border border-teal-500 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 outline-none w-full max-w-[200px] shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveTime}
+                  className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2">
+            {tags.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {tags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3.5 py-1 rounded-full bg-[#0F766E] text-white text-[11px] font-bold tracking-wide shadow-2xs"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Dòng Ghi chú */}
+            {!showNoteEditor ? (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditingNote(true);
+                  onStartEdit?.();
+                  onOpenUpdateModal?.();
+                }}
+                className="flex items-center gap-2 text-xs font-medium text-[#64748B] hover:text-teal-600 cursor-pointer group transition-colors"
+                title="Bấm để chỉnh sửa ghi chú"
+              >
+                <Pencil className="w-3.5 h-3.5 text-[#64748B] group-hover:text-teal-600 shrink-0 transition-colors" />
+                <span className="truncate">{note || 'Thêm ghi chú...'}</span>
+              </div>
+            ) : (
+              <div
+                className="flex items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Pencil className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                <input
+                  ref={noteInputRef}
+                  type="text"
+                  value={tempNote}
+                  onChange={(e) => setTempNote(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveNote()}
+                  placeholder="Nhập ghi chú..."
+                  className="bg-slate-50 border border-teal-500 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 outline-none flex-1 shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveNote}
+                  className="p-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Cụm bên phải: menu ⋯ (nếu có) + ảnh (nếu có) */}
-        {(menuSlot || imageUrl) && (
-          <div className="flex items-start gap-2 shrink-0">
-            {menuSlot}
-            {imageUrl && (
-              <img
-                src={imageUrl}
-                alt={title}
-                className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
-              />
-            )}
+        {/* Phần hình ảnh cover bên phải */}
+        {imageUrl && (
+          <div className="relative w-[130px] sm:w-[150px] shrink-0 overflow-hidden rounded-r-[20px] bg-slate-100">
+            <img
+              src={imageUrl}
+              alt={title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
           </div>
         )}
       </div>
-
-      {/* Tags danh mục */}
-      {tags.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {tags.map((tag, idx) => (
-            <span
-              key={idx}
-              className="text-[10px] font-extrabold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md uppercase tracking-wider"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Hiển thị Ghi chú hoặc Form chỉnh sửa */}
-      {isEditing ? (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="mt-1 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5 text-xs"
-        >
-          <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-bold text-slate-600">Giờ bắt đầu</span>
-              <input
-                type="time"
-                value={draftStart}
-                onChange={(e) => setDraftStart(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-teal-600 focus:outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-bold text-slate-600">Giờ kết thúc</span>
-              <input
-                type="time"
-                value={draftEnd}
-                onChange={(e) => setDraftEnd(e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:border-teal-600 focus:outline-none"
-              />
-            </label>
-          </div>
-
-          {timeError && (
-            <p className="text-[11px] font-semibold text-rose-600">{timeError}</p>
-          )}
-
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-bold text-slate-600">Ghi chú tham quan</span>
-            <input
-              type="text"
-              value={draftNote}
-              onChange={(e) => setDraftNote(e.target.value)}
-              placeholder="Ví dụ: Đặt bàn trước, mua vé cổng chính..."
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none"
-            />
-          </label>
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={closeEditor}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
-            >
-              <X className="w-3 h-3" />
-              <span>Hủy</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="inline-flex items-center gap-1 rounded-lg bg-[#0F766E] px-3 py-1 text-[11px] font-bold text-white hover:bg-teal-800 cursor-pointer"
-            >
-              <Check className="w-3 h-3" />
-              <span>Lưu</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        note && (
-          <p className="text-xs text-slate-600 font-medium border-t border-slate-100 pt-2.5 flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-            <span className="truncate">{note}</span>
-          </p>
-        )
-      )}
     </div>
   );
 };

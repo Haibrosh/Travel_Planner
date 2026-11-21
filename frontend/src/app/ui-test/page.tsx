@@ -188,14 +188,6 @@ export default function TripWorkspacePage() {
               dateRange="7/11 - 10/11"
               bannerUrl="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
             />
-            {/* Nút test mở Modal tạo chuyến đi mới */}
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="ml-4 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
-            >
-              + Tạo chuyến đi mới
-            </button>
           </div>
           <TripTabsNav activeTab={activeTab} onChangeTab={setActiveTab} />
         </div>

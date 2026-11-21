@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, ReactNode } from 'react';
+import { useState, ReactNode, useEffect } from 'react';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -14,6 +14,15 @@ export default function Providers({ children }: { children: ReactNode }) {
         },
       })
   );
+
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      import('@/mocks/browser').then(({ worker }) => {
+        worker.start();
+      });
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
