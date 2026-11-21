@@ -7,6 +7,7 @@ import { TripHeaderCard } from '@/components/trip-workspace/TripHeaderCard';
 import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNav';
 import { ItineraryTab, ItineraryItem } from '@/components/trip-workspace/ItineraryTab';
 import { TripBudgetPanel } from '@/components/trip-workspace/TripBudgetPanel';
+import { ChecklistTab, ChecklistItem } from '@/components/trip-workspace/ChecklistTab';
 import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
 import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
 import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
@@ -62,6 +63,14 @@ export default function TripWorkspacePage({ params }: PageProps) {
   const [fundBalance, setFundBalance] = useState(10000000);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([
     { id: 1, title: 'Thuê xe di chuyển', amount: 150000, category: 'Di chuyển', paidBy: 'Thành viên 1' },
+  ]);
+
+  // State mẫu hành lý (Sprint 8 chỉ cần thay bằng hook/service API)
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([
+    { id: 1, name: 'CCCD / Giấy tờ tùy thân', checked: true },
+    { id: 2, name: 'Sạc điện thoại & Pin dự phòng', checked: true },
+    { id: 3, name: 'Áo khoác & Trang phục phù hợp thời tiết', checked: false },
+    { id: 4, name: 'Kem chống nắng & Đồ dùng cá nhân', checked: false },
   ]);
 
   const [members, setMembers] = useState<MemberItem[]>([
@@ -220,6 +229,28 @@ export default function TripWorkspacePage({ params }: PageProps) {
               onUpdateBalance={(newVal) => setFundBalance(newVal)}
               onAddExpense={(newExp) => setExpenses([...expenses, { id: Date.now(), ...newExp }])}
               onDeleteExpense={(id) => setExpenses(expenses.filter((item) => item.id !== id))}
+            />
+          )}
+
+          {activeTab === 'checklist' && (
+            <ChecklistTab
+              items={checklistItems}
+              onToggleItem={(itemId, nextChecked) =>
+                setChecklistItems((prev) =>
+                  prev.map((item) =>
+                    item.id === itemId ? { ...item, checked: nextChecked } : item
+                  )
+                )
+              }
+              onAddItem={(name) =>
+                setChecklistItems((prev) => [
+                  ...prev,
+                  { id: Date.now(), name, checked: false },
+                ])
+              }
+              onDeleteItem={(itemId) =>
+                setChecklistItems((prev) => prev.filter((item) => item.id !== itemId))
+              }
             />
           )}
 

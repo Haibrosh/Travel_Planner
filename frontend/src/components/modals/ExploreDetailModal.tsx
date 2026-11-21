@@ -14,7 +14,7 @@ export interface ExploreDetailModalProps {
   onClose: () => void;
   title: string;
   imageUrl: string;
-  description: string;
+  description?: string;
   tags: string[];
   address: string;
   content?: WikiContent | null;
@@ -27,7 +27,6 @@ export const ExploreDetailModal: React.FC<ExploreDetailModalProps> = ({
   onClose,
   title,
   imageUrl,
-  description,
   tags,
   address,
   content,
@@ -82,29 +81,31 @@ export const ExploreDetailModal: React.FC<ExploreDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Phần Wiki Content từ DB (Chỉ hiển thị khi content != null) */}
+          {/* Phần Wiki Content từ DB (Tự ẩn hoàn toàn khi content == null) */}
           {content ? (
             <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200/60 shadow-xs">
-              <p className="text-sm text-[#475569] leading-relaxed">{content.summary || description}</p>
-              
-              <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
-                {content.attribution && <span>{content.attribution}</span>}
-                {content.sourceWikiUrl && (
-                  <a
-                    href={content.sourceWikiUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-bold text-teal-600 hover:underline"
-                  >
-                    <span>Xem bài gốc trên Wiki</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-              </div>
+              {content.summary && (
+                <p className="text-sm text-[#475569] leading-relaxed">{content.summary}</p>
+              )}
+
+              {(content.attribution || content.sourceWikiUrl) && (
+                <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
+                  {content.attribution && <span>{content.attribution}</span>}
+                  {content.sourceWikiUrl && (
+                    <a
+                      href={content.sourceWikiUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-bold text-teal-600 hover:underline"
+                    >
+                      <span>Xem bài gốc trên Wiki</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
-          ) : (
-            description && <p className="text-sm text-[#475569] leading-relaxed">{description}</p>
-          )}
+          ) : null}
 
           {/* Nút Hủy & Thêm vào chuyến đi */}
           <div className="flex items-center gap-3 pt-2">
