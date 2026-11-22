@@ -65,24 +65,51 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">✈️ Travel Planner</h1>
-        <p className="mt-2 text-gray-500">Tạo tài khoản mới</p>
+    <div className="bg-white rounded-[22px] border border-[#E2E8F0] shadow-sm p-8">
+      {/* Header với Logo TravelSync */}
+      <div className="text-center mb-7">
+        <Link href="/" className="inline-flex items-center gap-2.5 group">
+          <div className="w-10 h-10 rounded-[11px] bg-[#14B8A6] group-hover:bg-[#0D9488] transition-colors flex items-center justify-center shadow-xs">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="text-white"
+            >
+              <path
+                d="M3.5 10.5L16.5 4.5L10.5 16.5L9.2 11.8L3.5 10.5Z"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <span className="text-2xl font-extrabold tracking-tight text-[#0F172A]">
+            TravelSync
+          </span>
+        </Link>
+        <h1 className="mt-4 text-xl font-extrabold text-[#0F172A]">
+          Tạo tài khoản mới
+        </h1>
+        <p className="mt-1 text-xs text-[#64748B]">
+          Đồng bộ lịch trình, bản đồ và chi phí chuyến đi cùng bạn bè
+        </p>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs font-semibold text-rose-700">
           {error}
         </div>
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="username" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Tên hiển thị (Username)
           </label>
           <input
@@ -94,14 +121,14 @@ export default function RegisterPage() {
             value={formData.username}
             onChange={handleChange}
             placeholder="nguyenvana"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="email" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Email
           </label>
           <input
@@ -113,14 +140,14 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             placeholder="example@email.com"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="password" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Mật khẩu
           </label>
           <input
@@ -132,14 +159,14 @@ export default function RegisterPage() {
             value={formData.password}
             onChange={handleChange}
             placeholder="Ít nhất 6 ký tự"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="confirmPassword" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Xác nhận mật khẩu
           </label>
           <input
@@ -151,27 +178,27 @@ export default function RegisterPage() {
             value={formData.confirmPassword}
             onChange={handleChange}
             placeholder="Nhập lại mật khẩu"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white
-                     transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                     disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full h-11 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] px-4 text-sm font-bold text-white
+                     transition focus:outline-none focus:ring-2 focus:ring-teal-500/30
+                     disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
         >
           {isLoading ? 'Đang tạo tài khoản...' : 'Đăng ký'}
         </button>
       </form>
 
       {/* Switch to Login */}
-      <p className="mt-6 text-center text-sm text-gray-500">
+      <p className="mt-6 text-center text-xs text-[#64748B]">
         Đã có tài khoản?{' '}
-        <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+        <Link href="/login" className="font-bold text-[#0F766E] hover:text-[#14B8A6]">
           Đăng nhập
         </Link>
       </p>

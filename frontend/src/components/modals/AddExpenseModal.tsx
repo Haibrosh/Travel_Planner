@@ -48,6 +48,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     setTitle('');
     setAmount('');
     setCategory('Ăn uống');
+    setPaidBy(defaultPaidBy);
     onClose();
   };
 

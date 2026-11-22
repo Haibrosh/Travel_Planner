@@ -46,31 +46,58 @@ function LoginForm() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">✈️ Travel Planner</h1>
-        <p className="mt-2 text-gray-500">Chào mừng bạn quay trở lại!</p>
+    <div className="bg-white rounded-[22px] border border-[#E2E8F0] shadow-sm p-8">
+      {/* Header với Logo TravelSync chuẩn */}
+      <div className="text-center mb-7">
+        <Link href="/" className="inline-flex items-center gap-2.5 group">
+          <div className="w-10 h-10 rounded-[11px] bg-[#14B8A6] group-hover:bg-[#0D9488] transition-colors flex items-center justify-center shadow-xs">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="text-white"
+            >
+              <path
+                d="M3.5 10.5L16.5 4.5L10.5 16.5L9.2 11.8L3.5 10.5Z"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <span className="text-2xl font-extrabold tracking-tight text-[#0F172A]">
+            TravelSync
+          </span>
+        </Link>
+        <h1 className="mt-4 text-xl font-extrabold text-[#0F172A]">
+          Đăng nhập tài khoản
+        </h1>
+        <p className="mt-1 text-xs text-[#64748B]">
+          Chào mừng bạn quay trở lại cùng những hành trình mới
+        </p>
       </div>
 
       {/* Registration Success Banner */}
       {showRegisteredSuccess && (
-        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+        <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-xs font-semibold text-emerald-700">
           Đăng ký tài khoản thành công! Vui lòng đăng nhập.
         </div>
       )}
 
       {/* Error Banner */}
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs font-semibold text-rose-700">
           {error}
         </div>
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="email" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Email
           </label>
           <input
@@ -82,14 +109,14 @@ function LoginForm() {
             value={formData.email}
             onChange={handleChange}
             placeholder="example@email.com"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="password" className="block text-xs font-bold text-[#0F172A] mb-1.5">
             Mật khẩu
           </label>
           <input
@@ -101,24 +128,18 @@ function LoginForm() {
             value={formData.password}
             onChange={handleChange}
             placeholder="••••••••"
-            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900
-                       placeholder-gray-400 outline-none transition
-                       focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-2.5 text-sm text-[#0F172A]
+                       placeholder:text-slate-400 outline-none transition
+                       focus:border-[#14B8A6] focus:bg-white focus:ring-2 focus:ring-teal-500/20"
           />
-        </div>
-
-        <div className="flex justify-end">
-          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">
-            Quên mật khẩu?
-          </Link>
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white
-                     transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                     disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full h-11 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] px-4 text-sm font-bold text-white
+                     transition focus:outline-none focus:ring-2 focus:ring-teal-500/30
+                     disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
         >
           {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
         </button>
@@ -126,18 +147,25 @@ function LoginForm() {
 
       {/* Divider */}
       <div className="my-6 flex items-center gap-3">
-        <hr className="flex-1 border-gray-200" />
-        <span className="text-xs text-gray-400">HOẶC</span>
-        <hr className="flex-1 border-gray-200" />
+        <hr className="flex-1 border-slate-200" />
+        <span className="text-[11px] font-bold text-slate-400">HOẶC</span>
+        <hr className="flex-1 border-slate-200" />
       </div>
 
-      {/* Switch to Register */}
-      <p className="text-center text-sm text-gray-500">
-        Chưa có tài khoản?{' '}
-        <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
-          Đăng ký ngay
-        </Link>
-      </p>
+      {/* Switch to Register & Explore */}
+      <div className="space-y-2.5 text-center text-xs">
+        <p className="text-[#64748B]">
+          Chưa có tài khoản?{' '}
+          <Link href="/register" className="font-bold text-[#0F766E] hover:text-[#14B8A6]">
+            Đăng ký ngay
+          </Link>
+        </p>
+        <p>
+          <Link href="/explore" className="font-semibold text-slate-500 hover:text-[#0F172A]">
+            Quay lại khám phá điểm đến →
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

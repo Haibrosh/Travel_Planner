@@ -255,7 +255,10 @@ async function normalizeItineraryItem(
         raw.photoUrl ??
           raw.imageUrl ??
           placeSnapshot?.photoUrl ??
-          getPlaceFallbackImage(String(raw.category ?? placeSnapshot?.category))
+          getPlaceFallbackImage(
+            String(raw.category ?? placeSnapshot?.category),
+            placeId || String(raw.placeName ?? raw.name ?? '')
+          )
       ),
     });
   } else if (placeSnapshot && placeSnapshot.name) {
@@ -714,9 +717,22 @@ export const itineraryService = {
     });
     const raw = (response as unknown as Record<string, unknown>) || {};
     const rawItems = extractRawItemsArray(raw);
-    const orderedItems = await Promise.all(
+    const normalizedItems = await Promise.all(
       rawItems.map((item, idx) => normalizeItineraryItem(item, numericTripId, idx))
     );
+    const orderedItems: ItineraryItemResponse[] = normalizedItems.map((item, idx) => ({
+      ...item,
+      dayNumber: item.dayNumber ?? dayNumber,
+      orderIndex: idx + 1,
+      positionIndex: idx + 1,
+    }));
+
+    const currentLocal = getLocalItineraryItems(tripId);
+    const mergedLocal = sortItineraryItems([
+      ...currentLocal.filter((i) => i.dayNumber !== dayNumber),
+      ...orderedItems,
+    ]);
+    saveLocalItineraryItems(tripId, mergedLocal);
 
     return {
       orderedItems,

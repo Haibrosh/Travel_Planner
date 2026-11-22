@@ -31,7 +31,7 @@ export const ExploreCard: React.FC<ExploreCardProps> = ({
   onAddToTrip,
   onClick,
 }) => {
-  const fallbackImg = getPlaceFallbackImage(category);
+  const fallbackImg = getPlaceFallbackImage(category, id);
   const hasValidRating =
     rating !== null && rating !== undefined && !Number.isNaN(Number(rating));
 

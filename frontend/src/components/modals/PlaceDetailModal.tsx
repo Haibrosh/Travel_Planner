@@ -62,7 +62,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   if (!isOpen || !place) return null;
 
   const rawCategory = fetchedPlace?.category || place.category || 'attraction';
-  const fallbackImage = getPlaceFallbackImage(rawCategory);
+  const fallbackImage = getPlaceFallbackImage(rawCategory, place.id);
 
   const displayTitle = fetchedPlace?.name || place.title;
   const displayCategory =
