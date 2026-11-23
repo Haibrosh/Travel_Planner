@@ -71,6 +71,7 @@ export interface BatchReorderItineraryRequest {
 
 export interface OptimizationResult {
   orderedItems: ItineraryItemResponse[];
+  routeCoordinates: Array<{ latitude: number; longitude: number }>;
   distanceBeforeKm: number;
   distanceAfterKm: number;
   distanceSavedKm: number;
@@ -720,6 +721,16 @@ export const itineraryService = {
 
     return {
       orderedItems,
+      routeCoordinates: Array.isArray(raw.routeCoordinates)
+        ? raw.routeCoordinates
+            .filter((coordinate): coordinate is Record<string, unknown> =>
+              typeof coordinate === "object" && coordinate !== null
+            )
+            .map((coordinate) => ({
+              latitude: Number(coordinate.latitude),
+              longitude: Number(coordinate.longitude),
+            }))
+        : [],
       distanceBeforeKm: Number(raw.distanceBeforeKm ?? 0),
       distanceAfterKm: Number(raw.distanceAfterKm ?? raw.totalDistanceKm ?? 0),
       distanceSavedKm: Number(raw.distanceSavedKm ?? 0),

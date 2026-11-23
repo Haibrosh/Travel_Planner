@@ -20,6 +20,16 @@ public class RouteOptimizationResponse {
     private Integer dayNumber;
     private Double totalDistanceKm;
     private List<OptimizedStop> stops;
+    private List<RouteCoordinate> routeCoordinates;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RouteCoordinate {
+        private Double latitude;
+        private Double longitude;
+    }
 
     /** Một địa điểm sau khi đã xếp lại thứ tự. */
     @Data
