@@ -76,6 +76,12 @@ public class RouteOptimizationService {
                 .dayNumber(dayNumber)
                 .totalDistanceKm(totalKm)
                 .stops(stops)
+                .routeCoordinates(orderedItems.stream()
+                        .map(item -> RouteOptimizationResponse.RouteCoordinate.builder()
+                                .latitude(item.getPlace().getLatitude())
+                                .longitude(item.getPlace().getLongitude())
+                                .build())
+                        .toList())
                 .build();
     }
 
