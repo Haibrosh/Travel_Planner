@@ -1,154 +1,130 @@
-import { arrayMove } from '@dnd-kit/sortable';
 import type { ItineraryItemResponse } from '@/services/itinerary.service';
 
-// Prefix id của chip ngày (droppable), vd: 'day-2'
-export const DAY_DROP_PREFIX = 'day-';
-
-// Vị trí mới của một item sau khi kéo thả
-export interface ItemPositionChange {
+export interface ItemPosition {
   itemId: number;
-  dayNumber: number;
-  orderIndex: number; // bắt đầu từ 1
+  dayNumber: number | null;
+  orderIndex: number; // 1-based trong ngày
 }
 
-// Dữ liệu truyền vào mutation (PUT .../items/{itemId}/reorder)
-export interface MovedItemPayload {
+export interface MovePlan {
   itemId: number;
   targetDayNumber: number;
-  orderIndex: number;
+  orderIndex: number; // vị trí mới (1-based) trong ngày đích
   prevItemId: number | null;
   nextItemId: number | null;
+  positions: ItemPosition[]; // toàn bộ item bị đổi vị trí (ngày nguồn + ngày đích)
 }
 
-export interface DragMoveResult {
-  moved: MovedItemPayload;
-  changes: ItemPositionChange[]; // mọi item bị ảnh hưởng (ngày nguồn + ngày đích)
+// id dùng cho dnd-kit
+export const DAY_DROP_PREFIX = 'day-drop-';
+export const itemDndId = (itemId: number) => `item-${itemId}`;
+export const dayDndId = (dayNumber: number) => `day-${dayNumber}`;
+
+export function parseItemDndId(id: string | number): number | null {
+  const s = String(id);
+  return s.startsWith('item-') ? Number(s.slice(5)) : null;
 }
 
-// Lấy các item của một ngày, đã sắp theo thứ tự
-function itemsOfDay(items: ItineraryItemResponse[], day: number): ItineraryItemResponse[] {
+export function parseDayDndId(id: string | number): number | null {
+  const s = String(id);
+  return s.startsWith('day-') ? Number(s.slice(4)) : null;
+}
+
+// Danh sách item của một ngày (null = hàng chờ chưa xếp ngày), sắp theo orderIndex
+export function getDayList(
+  items: ItineraryItemResponse[],
+  dayNumber: number | null
+): ItineraryItemResponse[] {
   return items
-    .filter((i) => i.dayNumber === day)
+    .filter((i) => i.dayNumber === dayNumber)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 }
 
-// Đánh lại orderIndex 1..n cho một danh sách trong một ngày
-function renumber(list: ItineraryItemResponse[], day: number): ItemPositionChange[] {
-  return list.map((item, idx) => ({ itemId: item.itemId, dayNumber: day, orderIndex: idx + 1 }));
-}
-
-interface ComputeParams {
-  items: ItineraryItemResponse[]; // toàn bộ lịch trình của trip
-  activeId: string | number;      // id thẻ đang kéo (itemId)
-  overId: string | number;        // id thẻ / chip ngày đang thả lên
-}
-
 /**
- * Tính vị trí mới sau khi thả. Trả về null nếu không có gì thay đổi.
- * - Thả lên thẻ cùng ngày  -> đổi thứ tự trong ngày
- * - Thả lên chip "Ngày N"  -> chuyển sang cuối Ngày N
- * - Thả lên thẻ ngày khác  -> chèn vào vị trí của thẻ đó (hỗ trợ sẵn)
+ * Chuyển 1 item sang (targetDayNumber, finalIndex).
+ * finalIndex = vị trí 0-based của item SAU khi chuyển (Infinity = cuối ngày).
+ * Trả về null nếu không có gì thay đổi.
  */
-export function computeDragResult({ items, activeId, overId }: ComputeParams): DragMoveResult | null {
-  const activeItem = items.find((i) => String(i.itemId) === String(activeId));
-  if (!activeItem || activeItem.dayNumber === null) return null;
+export function planMove(
+  items: ItineraryItemResponse[],
+  itemId: number,
+  targetDayNumber: number,
+  finalIndex: number
+): MovePlan | null {
+  const moved = items.find((i) => i.itemId === itemId);
+  if (!moved) return null;
 
-  const sourceDay = activeItem.dayNumber;
-  const overKey = String(overId);
+  const fromDay = moved.dayNumber;
+  const sourceList = getDayList(items, fromDay);
+  const originalIndex = sourceList.findIndex((i) => i.itemId === itemId);
 
-  let targetDay: number;
-  let newTargetList: ItineraryItemResponse[];
+  const targetWithout = getDayList(items, targetDayNumber).filter(
+    (i) => i.itemId !== itemId
+  );
+  const index = Math.min(Math.max(0, finalIndex), targetWithout.length);
 
-  if (overKey.startsWith(DAY_DROP_PREFIX)) {
-    // Thả lên chip ngày -> xuống cuối ngày đó
-    targetDay = Number(overKey.slice(DAY_DROP_PREFIX.length));
-    if (!Number.isFinite(targetDay) || targetDay < 1 || targetDay === sourceDay) return null;
-    newTargetList = [...itemsOfDay(items, targetDay), activeItem];
-  } else {
-    const overItem = items.find((i) => String(i.itemId) === overKey);
-    if (!overItem || overItem.dayNumber === null || overItem.itemId === activeItem.itemId) {
-      return null;
-    }
-    targetDay = overItem.dayNumber;
-    const targetList = itemsOfDay(items, targetDay);
+  if (fromDay === targetDayNumber && index === originalIndex) return null;
 
-    if (targetDay === sourceDay) {
-      // Cùng ngày: arrayMove theo index
-      const from = targetList.findIndex((i) => i.itemId === activeItem.itemId);
-      const to = targetList.findIndex((i) => i.itemId === overItem.itemId);
-      if (from < 0 || to < 0 || from === to) return null;
-      newTargetList = arrayMove(targetList, from, to);
-    } else {
-      // Khác ngày: chèn vào trước thẻ đang thả lên
-      const overIdx = targetList.findIndex((i) => i.itemId === overItem.itemId);
-      newTargetList = [...targetList];
-      newTargetList.splice(overIdx, 0, activeItem);
-    }
-  }
+  const nextTarget = [
+    ...targetWithout.slice(0, index),
+    moved,
+    ...targetWithout.slice(index),
+  ];
 
-  const newIndex = newTargetList.findIndex((i) => i.itemId === activeItem.itemId);
+  // Đánh lại orderIndex 1..n cho ngày đích
+  const positions: ItemPosition[] = nextTarget.map((it, idx) => ({
+    itemId: it.itemId,
+    dayNumber: targetDayNumber,
+    orderIndex: idx + 1,
+  }));
 
-  const changes = renumber(newTargetList, targetDay);
-  if (targetDay !== sourceDay) {
-    // Ngày nguồn bị mất 1 item -> đánh lại số thứ tự cho liền mạch
-    const newSourceList = itemsOfDay(items, sourceDay).filter((i) => i.itemId !== activeItem.itemId);
-    changes.push(...renumber(newSourceList, sourceDay));
+  // Kéo sang ngày khác thì ngày nguồn cũng phải đánh lại số thứ tự
+  if (fromDay !== targetDayNumber) {
+    sourceList
+      .filter((i) => i.itemId !== itemId)
+      .forEach((it, idx) =>
+        positions.push({ itemId: it.itemId, dayNumber: fromDay, orderIndex: idx + 1 })
+      );
   }
 
   return {
-    moved: {
-      itemId: activeItem.itemId,
-      targetDayNumber: targetDay,
-      orderIndex: newIndex + 1,
-      prevItemId: newTargetList[newIndex - 1]?.itemId ?? null,
-      nextItemId: newTargetList[newIndex + 1]?.itemId ?? null,
-    },
-    changes,
+    itemId,
+    targetDayNumber,
+    orderIndex: index + 1,
+    prevItemId: nextTarget[index - 1]?.itemId ?? null,
+    nextItemId: nextTarget[index + 1]?.itemId ?? null,
+    positions,
   };
 }
 
-// Áp các thay đổi vào danh sách (dùng cho optimistic update của React Query)
-export function applyChangesToItems(
+// Áp các vị trí mới lên danh sách (dùng cho optimistic update)
+export function applyPositions(
   items: ItineraryItemResponse[],
-  changes: ItemPositionChange[]
+  positions: ItemPosition[]
 ): ItineraryItemResponse[] {
-  const map = new Map(changes.map((c) => [c.itemId, c]));
-  return items.map((item) => {
-    const change = map.get(item.itemId);
-    if (!change) return item;
-    return {
-      ...item,
-      dayNumber: change.dayNumber,
-      orderIndex: change.orderIndex,
-      positionIndex: change.orderIndex,
-    };
+  const map = new Map(positions.map((p) => [p.itemId, p]));
+  return items.map((it) => {
+    const p = map.get(it.itemId);
+    return p
+      ? { ...it, dayNumber: p.dayNumber, orderIndex: p.orderIndex, positionIndex: p.orderIndex }
+      : it;
   });
 }
 
-/**
- * Chuyển "thứ tự hiện tại" -> "thứ tự đích" thành chuỗi lệnh move tuần tự.
- * Xử lý từ trên xuống nên đúng dù backend dịch chuyển các item khác hay không.
- */
-export function buildSequentialMoves(
-  current: ItineraryItemResponse[],
-  target: ItineraryItemResponse[]
-): Omit<MovedItemPayload, 'targetDayNumber'>[] {
-  const list = [...current];
-  const moves: Omit<MovedItemPayload, 'targetDayNumber'>[] = [];
-
-  target.forEach((targetItem, i) => {
-    if (list[i]?.itemId === targetItem.itemId) return;
-    const from = list.findIndex((x) => x.itemId === targetItem.itemId);
-    if (from < 0) return;
-    const [moved] = list.splice(from, 1);
-    list.splice(i, 0, moved);
-    moves.push({
-      itemId: moved.itemId,
-      orderIndex: i + 1,
-      prevItemId: list[i - 1]?.itemId ?? null,
-      nextItemId: list[i + 1]?.itemId ?? null,
-    });
+// Sắp cả ngày theo orderedIds: tạo chuỗi MovePlan chạy tuần tự (dùng cho "Tối ưu lộ trình")
+export function planDayReorder(
+  items: ItineraryItemResponse[],
+  dayNumber: number,
+  orderedIds: number[]
+): MovePlan[] {
+  const plans: MovePlan[] = [];
+  let simulated = items;
+  orderedIds.forEach((id, index) => {
+    const plan = planMove(simulated, id, dayNumber, index);
+    if (plan) {
+      plans.push(plan);
+      simulated = applyPositions(simulated, plan.positions);
+    }
   });
-
-  return moves;
+  return plans;
 }

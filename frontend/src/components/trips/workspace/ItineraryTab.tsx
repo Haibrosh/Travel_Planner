@@ -1,49 +1,36 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   DndContext,
-  type CollisionDetection,
-  type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
   pointerWithin,
-  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import {
-  AlertCircle,
-  CalendarDays,
   Check,
-  Clock,
   Compass,
-  GripVertical,
-  MapPin,
-  Pencil,
   Plus,
   Route,
   Search,
   Sparkles,
   Star,
-  StickyNote,
   Trash2,
-  X,
 } from 'lucide-react';
 import type { TripResponse } from '@/types/trip';
 import type { Place as MapPlace } from '@/types/place';
 import type { Place as ExplorePlace } from '@/types/explore';
-import type { ItineraryItemResponse } from '@/services/itinerary.service';
 import TripMapLoader from '@/components/map/TripMapLoader';
 import { useTripUiStore } from '@/store/useTripUiStore';
 import { useMapStore } from '@/store/useMapStore';
@@ -52,12 +39,23 @@ import {
   useAddItineraryItemMutation,
   useDeleteItineraryItemMutation,
   useItineraryQuery,
-  useOptimizeDayRouteMutation,
-  useReorderItineraryMutation,
   useUpdateItineraryItemMutation,
 } from '@/hooks/useItinerary';
+import { useMoveItineraryItemsMutation } from '@/hooks/useMoveItineraryItems';
 import { usePlaces } from '@/hooks/usePlaces';
+import DayChip from './DayChip';
+import SortableItineraryCard from './SortableItineraryCard';
 import { getDayColor } from '@/utils/dayColors';
+import { countRoutablePoints, optimizeDayOrder } from '@/utils/routeOptimize';
+import {
+  dayDndId,
+  getDayList,
+  itemDndId,
+  parseDayDndId,
+  parseItemDndId,
+  planDayReorder,
+  planMove,
+} from '@/utils/itineraryDnd';
 import {
   CATEGORY_LABEL_MAP,
   formatRatingLabel,
@@ -76,467 +74,17 @@ const POOL_CATEGORIES = [
   { id: 'hotel', label: 'Khách sạn' },
 ] as const;
 
-// Con trỏ nằm trong chip ngày thì ưu tiên chip, ngược lại dùng closestCenter cho thẻ
+// Thả lên chip ngày thì ưu tiên chip; còn lại chỉ so với các thẻ (bỏ chip khỏi closestCenter)
 const collisionDetection: CollisionDetection = (args) => {
-  const pointerHits = pointerWithin(args);
-  return pointerHits.length > 0 ? pointerHits : closestCenter(args);
-};
-
-interface DroppableDayChipProps {
-  dayNum: number;
-  dateLabel: string;
-  count: number;
-  color: string; // màu của ngày, khớp marker và polyline trên bản đồ
-  isSelected: boolean;
-  onSelect: () => void;
-}
-
-function DroppableDayChip({
-  dayNum,
-  dateLabel,
-  count,
-  color,
-  isSelected,
-  onSelect,
-}: DroppableDayChipProps) {
-  const { isOver, setNodeRef } = useDroppable({
-    id: `day-drop-${dayNum}`,
+  const chipHit = pointerWithin(args).find((c) => parseDayDndId(c.id) !== null);
+  if (chipHit) return [chipHit];
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => parseDayDndId(c.id) === null
+    ),
   });
-
-  return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      onClick={onSelect}
-      // Chip đang chọn tô đúng màu ngày; đang kéo thẻ qua thì làm nổi viền
-      style={isSelected && !isOver ? { backgroundColor: color } : undefined}
-      className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer tabular-nums ${
-        isOver
-          ? 'ring-2 ring-teal-500 bg-teal-50 text-teal-900 scale-[1.03] dark:bg-teal-950/40 dark:text-teal-100'
-          : isSelected
-            ? 'text-white shadow-xs'
-            : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700'
-      }`}
-    >
-      {/* Chấm màu để nhận biết màu ngày khi chip chưa được chọn */}
-      {!isSelected && (
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      )}
-      <span>
-        Ngày {dayNum} ({dateLabel})
-      </span>
-      {count > 0 && (
-        <span
-          style={isSelected ? undefined : { backgroundColor: color }}
-          className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-extrabold tabular-nums ${
-            isSelected ? 'bg-white text-zinc-900' : 'text-white'
-          }`}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
-
-interface SortableItineraryCardProps {
-  item: ItineraryItemResponse;
-  idx: number;
-  color: string; // màu của ngày, khớp marker trên bản đồ
-  activeDayNum: number;
-  daysList: { dayNum: number; dateLabel: string; rawDate: string }[];
-  isSelected: boolean;
-  isSavingUpdate: boolean;
-  onSelectPlace: (placeId: string) => void;
-  onHoverPlace: (placeId: string | null) => void;
-  onDelete: (itemId: number, placeId: number) => void;
-  onSaveMeta: (
-    itemId: number,
-    payload: { startTime: string | null; endTime: string | null; note: string }
-  ) => void;
-  onMoveToDay: (item: ItineraryItemResponse, targetDayNum: number) => void;
-}
-
-function SortableItineraryCard({
-  item,
-  idx,
-  color,
-  activeDayNum,
-  daysList,
-  isSelected,
-  isSavingUpdate,
-  onSelectPlace,
-  onHoverPlace,
-  onDelete,
-  onSaveMeta,
-  onMoveToDay,
-}: SortableItineraryCardProps) {
-  const { place } = item;
-  const fallbackImg = getPlaceFallbackImage(place.category);
-  const hasRating =
-    place.rating !== null &&
-    place.rating !== undefined &&
-    !Number.isNaN(Number(place.rating));
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftStart, setDraftStart] = useState(item.startTime ?? '');
-  const [draftEnd, setDraftEnd] = useState(item.endTime ?? '');
-  const [draftNote, setDraftNote] = useState(item.note ?? '');
-  const [timeError, setTimeError] = useState<string | null>(null);
-
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.itemId });
-
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 40 : undefined,
-  };
-
-  const formattedTimeBadge =
-    item.startTime && item.endTime
-      ? `${item.startTime} – ${item.endTime}`
-      : item.startTime
-        ? `Từ ${item.startTime}`
-        : item.endTime
-          ? `Đến ${item.endTime}`
-          : null;
-
-  const handleOpenEditor = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDraftStart(item.startTime ?? '');
-    setDraftEnd(item.endTime ?? '');
-    setDraftNote(item.note ?? '');
-    setTimeError(null);
-    setIsEditing(true);
-  };
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const cleanStart = draftStart.trim() || null;
-    const cleanEnd = draftEnd.trim() || null;
-
-    if (cleanStart && cleanEnd && cleanEnd < cleanStart) {
-      setTimeError('Giờ kết thúc phải lớn hơn hoặc bằng giờ bắt đầu');
-      return;
-    }
-
-    setTimeError(null);
-    onSaveMeta(item.itemId, {
-      startTime: cleanStart,
-      endTime: cleanEnd,
-      note: draftNote.trim(),
-    });
-    setIsEditing(false);
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      id={`workspace-itinerary-card-${place.placeId}`}
-      onClick={() => onSelectPlace(String(place.placeId))}
-      onMouseEnter={() => onHoverPlace(String(place.placeId))}
-      onMouseLeave={() => onHoverPlace(null)}
-      className={`group relative flex items-start gap-2.5 rounded-2xl border p-3.5 transition-all cursor-pointer ${
-        isDragging
-          ? 'border-teal-600 bg-white shadow-lg ring-2 ring-teal-500/30 opacity-95'
-          : isSelected
-            ? 'border-teal-600 bg-teal-50/40 shadow-xs dark:bg-teal-950/20'
-            : 'border-zinc-200 bg-white hover:border-teal-400 hover:shadow-2xs dark:border-zinc-800 dark:bg-zinc-900'
-      }`}
-    >
-      {/* Tay nắm kéo thả (@dnd-kit) */}
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Kéo thả để đổi vị trí địa điểm"
-        title="Kéo thả để đổi thứ tự hoặc thả vào chip Ngày phía trên"
-        className="mt-1.5 shrink-0 cursor-grab touch-none rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 active:cursor-grabbing dark:hover:bg-zinc-800"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-
-      {/* Số thứ tự khớp với Marker trên bản đồ */}
-      <div
-        style={{ backgroundColor: color }}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-2xs mt-0.5 tabular-nums"
-      >
-        {idx + 1}
-      </div>
-
-      {/* Ảnh địa điểm */}
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100">
-        <img
-          src={place.photoUrl || fallbackImg}
-          alt={place.name}
-          loading="lazy"
-          onError={(e) => {
-            if (e.currentTarget.src !== fallbackImg) {
-              e.currentTarget.src = fallbackImg;
-            }
-          }}
-          className="h-full w-full object-cover"
-        />
-      </div>
-
-      {/* Thông tin địa điểm + Giờ tham quan + Ghi chú */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-1.5">
-          <h4 className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100 truncate">
-            {place.name}
-          </h4>
-
-          <div
-            className="flex items-center gap-1 shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Đổi ngày nhanh */}
-            {daysList.length > 1 && (
-              <div className="relative flex items-center">
-                <CalendarDays className="w-3 h-3 text-zinc-400 absolute left-1.5 pointer-events-none" />
-                <select
-                  aria-label="Chuyển sang ngày khác"
-                  title="Chuyển địa điểm sang ngày khác"
-                  value={activeDayNum}
-                  onChange={(e) => {
-                    const targetDay = Number(e.target.value);
-                    if (targetDay !== activeDayNum) {
-                      onMoveToDay(item, targetDay);
-                    }
-                  }}
-                  className="rounded-lg border border-zinc-200 bg-zinc-50 pl-5 pr-1.5 py-1 text-[10px] font-bold text-zinc-600 hover:border-teal-400 focus:border-teal-600 focus:outline-none cursor-pointer tabular-nums dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                >
-                  {daysList.map((d) => (
-                    <option key={d.dayNum} value={d.dayNum}>
-                      Ngày {d.dayNum}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Nút mở form chỉnh sửa giờ & ghi chú */}
-            <button
-              type="button"
-              title="Chỉnh sửa giờ tham quan & ghi chú"
-              onClick={handleOpenEditor}
-              className={`rounded-lg p-1.5 transition-colors cursor-pointer ${
-                isEditing
-                  ? 'bg-teal-50 text-teal-700'
-                  : 'text-zinc-400 hover:bg-teal-50 hover:text-teal-700'
-              }`}
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Nút xóa */}
-            <button
-              type="button"
-              title="Xóa địa điểm khỏi ngày này"
-              onClick={() => onDelete(item.itemId, place.placeId)}
-              className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Hàng badge Danh mục, Đánh giá và Giờ tham quan */}
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span className="rounded-md bg-teal-50 px-2 py-0.5 font-bold text-teal-700 dark:bg-teal-950/60 dark:text-teal-300">
-            {CATEGORY_LABEL_MAP[place.category] ||
-              place.subcategory ||
-              'Điểm tham quan'}
-          </span>
-
-          {hasRating ? (
-            <span className="inline-flex items-center gap-0.5 font-bold text-amber-600 tabular-nums">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              {formatRatingLabel(place.rating)}
-            </span>
-          ) : (
-            <span className="text-[10px] font-medium text-zinc-400">
-              Chưa có đánh giá
-            </span>
-          )}
-
-          {formattedTimeBadge ? (
-            <button
-              type="button"
-              onClick={handleOpenEditor}
-              title="Bấm để sửa giờ tham quan"
-              className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50/70 px-2 py-0.5 text-[11px] font-bold text-teal-800 hover:bg-teal-100 transition-colors cursor-pointer tabular-nums"
-            >
-              <Clock className="w-3 h-3 text-teal-600" />
-              <span>{formattedTimeBadge}</span>
-            </button>
-          ) : (
-            !isEditing && (
-              <button
-                type="button"
-                onClick={handleOpenEditor}
-                className="inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-500 hover:border-teal-400 hover:text-teal-700 transition-colors cursor-pointer"
-              >
-                <Clock className="w-2.5 h-2.5" />
-                <span>+ Giờ tham quan</span>
-              </button>
-            )
-          )}
-        </div>
-
-        {place.address && (
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-zinc-500 truncate">
-            <MapPin className="w-3 h-3 text-teal-600 shrink-0" />
-            <span className="truncate">{place.address}</span>
-          </p>
-        )}
-
-        {/* Hiển thị ghi chú hiện tại hoặc nút thêm ghi chú nhanh */}
-        {!isEditing && (
-          <div className="mt-2">
-            {item.note ? (
-              <div
-                onClick={handleOpenEditor}
-                title="Bấm để chỉnh sửa ghi chú"
-                className="flex items-start gap-1.5 rounded-xl border border-amber-200/70 bg-amber-50/50 px-2.5 py-1.5 text-[11px] text-zinc-700 hover:border-amber-300 transition-colors"
-              >
-                <StickyNote className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <span className="line-clamp-2 break-words">{item.note}</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOpenEditor}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 hover:text-teal-700 transition-colors cursor-pointer"
-              >
-                <StickyNote className="w-3 h-3" />
-                <span>+ Thêm ghi chú cho địa điểm này</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Form inline chỉnh sửa Giờ tham quan (startTime, endTime) & Ghi chú (note) */}
-        {isEditing && (
-          <form
-            onSubmit={handleSave}
-            onClick={(e) => e.stopPropagation()}
-            className="mt-3 space-y-2.5 rounded-xl border border-teal-200 bg-teal-50/30 p-3 dark:border-teal-900 dark:bg-zinc-800/70"
-          >
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                  <Clock className="h-3 w-3 text-teal-600" />
-                  Giờ bắt đầu
-                </label>
-                <input
-                  type="time"
-                  value={draftStart}
-                  onChange={(e) => {
-                    setDraftStart(e.target.value);
-                    setTimeError(null);
-                  }}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-800 tabular-nums focus:border-teal-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                  <Clock className="h-3 w-3 text-teal-600" />
-                  Giờ kết thúc
-                </label>
-                <input
-                  type="time"
-                  value={draftEnd}
-                  onChange={(e) => {
-                    setDraftEnd(e.target.value);
-                    setTimeError(null);
-                  }}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-800 tabular-nums focus:border-teal-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                />
-              </div>
-            </div>
-
-            {timeError && (
-              <p className="flex items-center gap-1 text-[11px] font-semibold text-rose-600">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{timeError}</span>
-              </p>
-            )}
-
-            <div>
-              <label className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                <StickyNote className="h-3 w-3 text-teal-600" />
-                Ghi chú tham quan
-              </label>
-              <input
-                type="text"
-                value={draftNote}
-                onChange={(e) => setDraftNote(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.stopPropagation();
-                    setIsEditing(false);
-                  }
-                }}
-                placeholder="VD: Mua vé online trước, mang áo khoác nhẹ, thử món đặc sản..."
-                className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-800 placeholder:text-zinc-400 focus:border-teal-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-              />
-            </div>
-
-            <div className="flex items-center justify-between pt-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftStart('');
-                  setDraftEnd('');
-                  setTimeError(null);
-                }}
-                className="text-[11px] font-semibold text-zinc-500 hover:text-rose-600 cursor-pointer"
-              >
-                Xóa giờ
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-600 hover:bg-zinc-50 cursor-pointer dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                >
-                  <X className="h-3 w-3" />
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingUpdate}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#0F766E] px-3 py-1 text-[11px] font-bold text-white hover:bg-teal-800 disabled:opacity-50 cursor-pointer"
-                >
-                  <Check className="h-3 w-3" />
-                  Lưu thay đổi
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
+};
 
 export default function ItineraryTab({ trip }: ItineraryTabProps) {
   const { selectedDayNumber, setSelectedDayNumber } = useTripUiStore();
@@ -602,15 +150,6 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   }, [daysList, selectedDayNumber, trip.startDate]);
 
   const activeDayNum = activeDay.dayNum;
-  const activeDayColor = getDayColor(activeDayNum);
-
-  // Click marker trên bản đồ -> cuộn tới thẻ tương ứng trong danh sách
-  useEffect(() => {
-    if (selectedPlaceId == null) return;
-    document
-      .getElementById(`workspace-itinerary-card-${selectedPlaceId}`)
-      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [selectedPlaceId]);
 
   // 1. Gọi React Query lấy danh sách lịch trình của chuyến đi & các mutation Optimistic Update
   const { data: itineraryItems = [], isLoading: isItineraryLoading } = useItineraryQuery(
@@ -619,8 +158,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   const addItemMutation = useAddItineraryItemMutation(trip.tripId);
   const deleteItemMutation = useDeleteItineraryItemMutation(trip.tripId);
   const updateItemMutation = useUpdateItineraryItemMutation(trip.tripId);
-  const reorderMutation = useReorderItineraryMutation(trip.tripId);
-  const optimizeRouteMutation = useOptimizeDayRouteMutation(trip.tripId);
+  const moveMutation = useMoveItineraryItemsMutation(trip.tripId);
 
   // 2. Lấy danh sách địa điểm gợi ý từ places_v2 theo tỉnh của chuyến đi cho Pool
   const { data: poolPlacesPage, isLoading: isPoolLoading } = usePlaces({
@@ -659,156 +197,68 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
     return counts;
   }, [itineraryItems]);
 
-  // Chuyển đổi dayItems sang định dạng MapPlace cho TripMapLoader
-  const mapPlaces = useMemo<MapPlace[]>(() => {
-    return dayItems
-      .filter(
-        (item) =>
-          item.place.latitude !== null &&
-          item.place.latitude !== undefined &&
-          item.place.longitude !== null &&
-          item.place.longitude !== undefined
-      )
-      .map((item) => ({
-        id: String(item.place.placeId),
-        name: item.place.name,
-        lat: Number(item.place.latitude),
-        lng: Number(item.place.longitude),
-        category: item.place.category,
-      }));
-  }, [dayItems]);
+  const dayColor = getDayColor(activeDayNum);
+  const canOptimize = countRoutablePoints(dayItems) >= 3;
 
-  // Xử lý chuyển một địa điểm sang ngày khác (bằng kéo thả lên chip Ngày hoặc chọn từ dropdown)
-  const handleMoveItemToDay = (movedItem: ItineraryItemResponse, targetDayNum: number) => {
-    if (targetDayNum === movedItem.dayNumber) return;
+  // Click marker trên bản đồ -> cuộn tới thẻ tương ứng
+  useEffect(() => {
+    if (selectedPlaceId == null) return;
+    document
+      .getElementById(`itinerary-card-${selectedPlaceId}`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedPlaceId]);
 
-    const sourceDayRemaining = itineraryItems
-      .filter((i) => i.dayNumber === movedItem.dayNumber && i.itemId !== movedItem.itemId)
-      .sort((a, b) => a.positionIndex - b.positionIndex)
-      .map((item, idx) => ({
-        ...item,
-        orderIndex: idx + 1,
-        positionIndex: idx + 1,
-      }));
+  // Dữ liệu cho TripMapLoader: order = số trên thẻ (tính trước khi lọc điểm thiếu tọa độ)
+  const mapPlaces = useMemo<MapPlace[]>(
+    () =>
+      dayItems.flatMap((item, idx) => {
+        const { latitude, longitude, placeId, name, category } = item.place;
+        if (typeof latitude !== 'number' || typeof longitude !== 'number') return [];
+        return [
+          { id: String(placeId), name, lat: latitude, lng: longitude, category, order: idx + 1 },
+        ];
+      }),
+    [dayItems]
+  );
 
-    const targetDayCurrent = itineraryItems
-      .filter((i) => i.dayNumber === targetDayNum && i.itemId !== movedItem.itemId)
-      .sort((a, b) => a.positionIndex - b.positionIndex);
-
-    const prevItem =
-      targetDayCurrent.length > 0 ? targetDayCurrent[targetDayCurrent.length - 1] : null;
-    const newOrderIndex = targetDayCurrent.length + 1;
-
-    const updatedMovedItem: ItineraryItemResponse = {
-      ...movedItem,
-      dayNumber: targetDayNum,
-      orderIndex: newOrderIndex,
-      positionIndex: newOrderIndex,
-    };
-
-    const targetDayUpdated = [...targetDayCurrent, updatedMovedItem].map((item, idx) => ({
-      ...item,
-      dayNumber: targetDayNum,
-      orderIndex: idx + 1,
-      positionIndex: idx + 1,
-    }));
-
-    const otherDaysItems = itineraryItems.filter(
-      (i) => i.dayNumber !== movedItem.dayNumber && i.dayNumber !== targetDayNum
-    );
-
-    const optimisticItems: ItineraryItemResponse[] = [
-      ...otherDaysItems,
-      ...sourceDayRemaining,
-      ...targetDayUpdated,
-    ];
-
-    const batchEntries = [...sourceDayRemaining, ...targetDayUpdated].map((i) => ({
-      itemId: i.itemId,
-      dayNumber: i.dayNumber,
-      orderIndex: i.orderIndex,
-    }));
-
-    reorderMutation.mutate({
-      tripId: trip.tripId,
-      items: batchEntries,
-      movedItemId: movedItem.itemId,
-      targetDayNumber: targetDayNum,
-      prevItemId: prevItem?.itemId ?? null,
-      nextItemId: null,
-      orderIndex: newOrderIndex,
-      optimisticItems,
-    });
-  };
-
-  // Xử lý kéo thả đổi vị trí địa điểm (Optimistic Update: 0ms không nháy, lỗi mới rollback)
+  // Thả thẻ: cùng ngày -> đổi thứ tự; thả lên chip ngày khác -> chuyển sang cuối ngày đó
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
 
-    const activeItemId = Number(active.id);
-    const movedItem = dayItems.find((i) => i.itemId === activeItemId);
-    if (!movedItem) return;
+    const activeItemId = parseItemDndId(active.id);
+    if (activeItemId === null) return;
+    const moved = itineraryItems.find((i) => i.itemId === activeItemId);
+    if (!moved) return;
 
-    // Trường hợp 1: Kéo thả thẻ địa điểm vào một chip Ngày khác ("day-drop-X")
-    const overIdStr = String(over.id);
-    if (overIdStr.startsWith('day-drop-')) {
-      const targetDayNum = Number(overIdStr.replace('day-drop-', ''));
-      if (!Number.isNaN(targetDayNum) && targetDayNum !== activeDayNum) {
-        handleMoveItemToDay(movedItem, targetDayNum);
-      }
-      return;
+    let targetDay: number;
+    let finalIndex: number;
+
+    const overDay = parseDayDndId(over.id);
+    if (overDay !== null) {
+      if (overDay === moved.dayNumber) return;
+      targetDay = overDay;
+      finalIndex = Number.POSITIVE_INFINITY; // cuối ngày đích
+    } else {
+      const overItemId = parseItemDndId(over.id);
+      const overItem =
+        overItemId === null ? undefined : itineraryItems.find((i) => i.itemId === overItemId);
+      if (!overItem || overItem.dayNumber === null) return;
+      targetDay = overItem.dayNumber;
+      finalIndex = getDayList(itineraryItems, targetDay).findIndex(
+        (i) => i.itemId === overItem.itemId
+      );
     }
 
-    // Trường hợp 2: Kéo thả đổi thứ tự trong cùng ngày đang chọn
-    const overItemId = Number(over.id);
-    if (activeItemId === overItemId) return;
-
-    const oldIndex = dayItems.findIndex((i) => i.itemId === activeItemId);
-    const newIndex = dayItems.findIndex((i) => i.itemId === overItemId);
-    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
-
-    const reorderedDayItems = arrayMove(dayItems, oldIndex, newIndex).map((item, idx) => ({
-      ...item,
-      orderIndex: idx + 1,
-      positionIndex: idx + 1,
-    }));
-
-    const prevItem = newIndex > 0 ? reorderedDayItems[newIndex - 1] : null;
-    const nextItem =
-      newIndex < reorderedDayItems.length - 1 ? reorderedDayItems[newIndex + 1] : null;
-
-    const otherDaysItems = itineraryItems.filter((i) => i.dayNumber !== activeDayNum);
-    const optimisticItems: ItineraryItemResponse[] = [...otherDaysItems, ...reorderedDayItems];
-
-    reorderMutation.mutate({
-      tripId: trip.tripId,
-      items: reorderedDayItems.map((i) => ({
-        itemId: i.itemId,
-        dayNumber: activeDayNum,
-        orderIndex: i.orderIndex,
-      })),
-      movedItemId: movedItem.itemId,
-      targetDayNumber: activeDayNum,
-      prevItemId: prevItem?.itemId ?? null,
-      nextItemId: nextItem?.itemId ?? null,
-      orderIndex: newIndex + 1,
-      optimisticItems,
-    });
+    const plan = planMove(itineraryItems, activeItemId, targetDay, finalIndex);
+    if (plan) moveMutation.mutate([plan]);
   };
 
-  // Xử lý lưu chỉnh sửa giờ tham quan (startTime, endTime) và ghi chú (note)
-  const handleSaveCardMeta = (
-    itemId: number,
-    payload: { startTime: string | null; endTime: string | null; note: string }
-  ) => {
-    updateItemMutation.mutate({
-      tripId: trip.tripId,
-      itemId,
-      startTime: payload.startTime,
-      endTime: payload.endTime,
-      note: payload.note,
-    });
+  // Tối ưu lộ trình: giữ điểm đầu, các điểm sau xếp theo khoảng cách gần nhất
+  const handleOptimizeRoute = () => {
+    const orderedIds = optimizeDayOrder(dayItems);
+    const plans = planDayReorder(itineraryItems, activeDayNum, orderedIds);
+    if (plans.length > 0) moveMutation.mutate(plans);
   };
 
   // Xử lý bấm nút + trong Pool địa điểm để lưu vào ngày đang chọn
@@ -845,23 +295,22 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   return (
     <div className="flex h-[calc(100vh-125px)] w-full overflow-hidden">
       {/* Cột trái: Timeline lịch trình các ngày & Pool địa điểm */}
-      <DndContext
-        id="workspace-itinerary-dnd"
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="w-full md:w-[480px] lg:w-[540px] shrink-0 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-y-auto">
-          {/* Day Selector Chips (Lưu trạng thái vào useTripUiStore.selectedDayNumber + nhận kéo thả đổi ngày) */}
+      <div className="w-full md:w-[480px] lg:w-[520px] shrink-0 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-y-auto">
+        <DndContext
+          id="itinerary-dnd" // id cố định để tránh lỗi hydration của dnd-kit
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragEnd={handleDragEnd}
+        >
+          {/* Chip chọn ngày (cũng là vùng thả để chuyển địa điểm sang ngày khác) */}
           <div className="sticky top-0 z-10 border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur-xs dark:border-zinc-800 dark:bg-zinc-900/95">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {daysList.map((d) => (
-                <DroppableDayChip
+                <DayChip
                   key={d.dayNum}
                   dayNum={d.dayNum}
                   dateLabel={d.dateLabel}
                   count={countByDay[d.dayNum] ?? 0}
-                  color={getDayColor(d.dayNum)}
                   isSelected={activeDayNum === d.dayNum}
                   onSelect={() => {
                     setSelectedDayNumber(d.dayNum);
@@ -875,36 +324,27 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
 
           {/* Nội dung ngày được chọn */}
           <div className="flex-1 p-5 space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
               <div>
                 <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-50">
                   Lộ trình Ngày {activeDayNum}
                 </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 tabular-nums">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                   {activeDay.dateLabel} • {dayItems.length} địa điểm đã lên lịch
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
-                {dayItems.length >= 2 && (
-                  <button
-                    type="button"
-                    disabled={optimizeRouteMutation.isPending}
-                    onClick={() =>
-                      optimizeRouteMutation.mutate({
-                        tripId: trip.tripId,
-                        dayNumber: activeDayNum,
-                      })
-                    }
-                    title="Tối ưu thứ tự di chuyển ngắn nhất bằng thuật toán 2-Opt"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:border-teal-500 hover:text-teal-700 transition-colors cursor-pointer disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-                  >
-                    <Route className="w-3.5 h-3.5 text-teal-600" />
-                    <span>
-                      {optimizeRouteMutation.isPending ? 'Đang tối ưu...' : 'Tối ưu lộ trình'}
-                    </span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleOptimizeRoute}
+                  disabled={!canOptimize || moveMutation.isPending}
+                  title="Giữ nguyên điểm đầu, sắp các điểm còn lại theo khoảng cách gần nhất"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
+                >
+                  <Route className="w-3.5 h-3.5" />
+                  <span>Tối ưu lộ trình</span>
+                </button>
 
                 <Link
                   href="/explore"
@@ -916,7 +356,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
               </div>
             </div>
 
-            {/* 1. Danh sách các địa điểm trong ngày đang chọn (Sortable + Optimistic Reorder + Inline Note/Time Edit) */}
+            {/* 1. Danh sách địa điểm trong ngày đang chọn (kéo thả để đổi thứ tự) */}
             {isItineraryLoading ? (
               <div className="space-y-3">
                 {[1, 2].map((skeleton) => (
@@ -940,33 +380,27 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
               </div>
             ) : (
               <SortableContext
-                items={dayItems.map((item) => item.itemId)}
+                items={dayItems.map((i) => itemDndId(i.itemId))}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
-                  {dayItems.map((item, idx) => {
-                    const isSelected =
-                      selectedPlaceId !== null &&
-                      String(selectedPlaceId) === String(item.place.placeId);
-
-                    return (
-                      <SortableItineraryCard
-                        key={item.itemId}
-                        item={item}
-                        idx={idx}
-                        color={activeDayColor}
-                        activeDayNum={activeDayNum}
-                        daysList={daysList}
-                        isSelected={isSelected}
-                        isSavingUpdate={updateItemMutation.isPending}
-                        onSelectPlace={setSelectedPlaceId}
-                        onHoverPlace={setHoveredPlaceId}
-                        onDelete={handleDeleteItineraryItem}
-                        onSaveMeta={handleSaveCardMeta}
-                        onMoveToDay={handleMoveItemToDay}
-                      />
-                    );
-                  })}
+                  {dayItems.map((item, idx) => (
+                    <SortableItineraryCard
+                      key={item.itemId}
+                      item={item}
+                      index={idx}
+                      color={dayColor}
+                      isSelected={
+                        selectedPlaceId !== null &&
+                        String(selectedPlaceId) === String(item.place.placeId)
+                      }
+                      onSelect={(placeId) => setSelectedPlaceId(String(placeId))}
+                      onHover={(placeId) =>
+                        setHoveredPlaceId(placeId === null ? null : String(placeId))
+                      }
+                      onDelete={handleDeleteItineraryItem}
+                    />
+                  ))}
                 </div>
               </SortableContext>
             )}
@@ -1171,12 +605,16 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
               )}
             </div>
           </div>
-        </div>
-      </DndContext>
+        </DndContext>
+      </div>
 
       {/* Cột phải: Bản đồ tương tác (tự động vẽ marker & đường nối theo dayItems của ngày đang chọn) */}
       <div className="hidden md:block flex-1 h-full relative bg-zinc-100 dark:bg-zinc-950">
-        <TripMapLoader places={mapPlaces} dayNumber={activeDayNum} />
+        <TripMapLoader
+          places={mapPlaces}
+          dayKey={`day-${activeDayNum}`}
+          dayColor={dayColor}
+        />
       </div>
     </div>
   );

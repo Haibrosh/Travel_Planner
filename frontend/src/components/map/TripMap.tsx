@@ -9,35 +9,35 @@ import { useMapStore } from "@/store/useMapStore";
 import { useMapHoverStore } from "@/store/useMapHoverStore";
 import { useItineraryStore, useSelectedDayItems } from "@/store/useItineraryStore";
 import { getCategoryLabel } from "@/utils/placeCategory";
-import { getDayColor } from "@/utils/dayColors";
 
 const DEFAULT_CENTER: L.LatLngTuple = [10.346, 107.084]; // Vũng Tàu
 const DEFAULT_ZOOM = 13;
+const DEFAULT_COLOR = "#14b8a6";
 
 type MarkerState = "default" | "hover" | "selected";
 
-// Màu nền đặt bằng inline style (Tailwind không sinh được class màu động)
 const MARKER_BASE =
   "flex h-full w-full items-center justify-center rounded-full border-2 border-white text-xs font-extrabold text-white shadow-lg transition-transform";
 
+const MARKER_SCALE: Record<MarkerState, string> = {
+  default: "",
+  hover: "scale-110",
+  selected: "scale-110",
+};
+
 const iconCache = new Map<string, L.DivIcon>();
 
+// Màu nền lấy theo ngày (hex 6 ký tự nên có thể nối thêm alpha cho vòng sáng)
 function getMarkerIcon(order: number, state: MarkerState, color: string): L.DivIcon {
   const key = `${order}-${state}-${color}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
   const size = state === "selected" ? 36 : 30;
-  const extra =
-    state === "selected"
-      ? `box-shadow:0 0 0 4px ${color}66,0 4px 10px rgba(0,0,0,.25);transform:scale(1.1);`
-      : state === "hover"
-        ? "transform:scale(1.1);"
-        : "";
-
+  const ring = state === "selected" ? `box-shadow:0 0 0 4px ${color}59;` : "";
   const icon = L.divIcon({
     className: "",
-    html: `<div class="${MARKER_BASE}" style="background:${color};${extra}">${order}</div>`,
+    html: `<div class="${MARKER_BASE} ${MARKER_SCALE[state]}" style="background-color:${color};${ring}">${order}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
@@ -120,10 +120,11 @@ function SelectedMarkerSync({
 
 interface TripMapProps {
   places?: Place[];
-  dayNumber?: number; // ngày đang chọn -> quyết định màu marker/polyline và key fitBounds
+  dayKey?: string; // truyền từ tab lịch trình; không truyền thì lấy từ useItineraryStore (prototype)
+  dayColor?: string; // màu marker + Polyline của ngày đang chọn
 }
 
-export default function TripMap({ places, dayNumber }: TripMapProps) {
+export default function TripMap({ places, dayKey: dayKeyProp, dayColor }: TripMapProps) {
   const center = useMapStore((s) => s.center);
   const zoom = useMapStore((s) => s.zoom);
   const mapSelectedPlaceId = useMapStore((s) => s.selectedPlaceId);
@@ -135,9 +136,8 @@ export default function TripMap({ places, dayNumber }: TripMapProps) {
   const setItinerarySelectedPlaceId = useItineraryStore((s) => s.setSelectedPlaceId);
   const itineraryItems = useSelectedDayItems();
 
-  // Có dayNumber (workspace thật) thì ưu tiên, không thì dùng key của prototype
-  const dayKey = dayNumber !== undefined ? `day-${dayNumber}` : storeDayKey;
-  const dayColor = getDayColor(dayNumber ?? 1);
+  const dayKey = dayKeyProp ?? storeDayKey;
+  const color = dayColor ?? DEFAULT_COLOR;
 
   const displayPlaces = useMemo<Place[]>(() => {
     if (places !== undefined) return places;
@@ -149,7 +149,7 @@ export default function TripMap({ places, dayNumber }: TripMapProps) {
 
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
 
-  // Đường nối tuần tự 1 -> 2 -> 3... theo thứ tự trong ngày
+  // Đường nối tuần tự 1 -> 2 -> 3...; đổi thứ tự thì tự vẽ lại
   const routePositions = useMemo<L.LatLngTuple[]>(
     () => displayPlaces.map((p) => [p.lat, p.lng]),
     [displayPlaces]
@@ -181,21 +181,22 @@ export default function TripMap({ places, dayNumber }: TripMapProps) {
 
       {routePositions.length >= 2 && (
         <Polyline
-          key={`route-${dayKey ?? "default"}`}
           positions={routePositions}
-          pathOptions={{ color: dayColor, weight: 4, opacity: 0.85 }}
+          pathOptions={{ color, weight: 4, opacity: 0.85, dashArray: "6 8" }}
         />
       )}
 
       {displayPlaces.map((place, index) => {
         const isSelected = activeSelectedId != null && String(activeSelectedId) === String(place.id);
         const isHovered = hoveredPlaceId != null && String(hoveredPlaceId) === String(place.id);
+        // Ưu tiên order từ lịch trình để số marker luôn khớp số trên thẻ
+        const order = place.order ?? index + 1;
 
         return (
           <Marker
             key={place.id}
             position={[place.lat, place.lng]}
-            icon={getMarkerIcon(index + 1, getMarkerState(isSelected, isHovered), dayColor)}
+            icon={getMarkerIcon(order, getMarkerState(isSelected, isHovered), color)}
             zIndexOffset={isSelected ? 1000 : isHovered ? 500 : 0}
             ref={(marker) => {
               if (marker) markerRefs.current.set(String(place.id), marker);

@@ -14,9 +14,10 @@ const TripMap = dynamic(() => import("./TripMap"), {
 
 interface TripMapLoaderProps {
   places?: Place[];
-  dayNumber?: number;
+  dayKey?: string; // đổi ngày thì map fitBounds lại
+  dayColor?: string; // màu marker + đường nối của ngày
 }
 
-export default function TripMapLoader({ places, dayNumber }: TripMapLoaderProps) {
-  return <TripMap places={places} dayNumber={dayNumber} />;
+export default function TripMapLoader({ places, dayKey, dayColor }: TripMapLoaderProps) {
+  return <TripMap places={places} dayKey={dayKey} dayColor={dayColor} />;
 }
