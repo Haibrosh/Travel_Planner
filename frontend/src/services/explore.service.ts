@@ -30,17 +30,48 @@ export const CATEGORY_LABEL_MAP: Record<string, string> = {
 };
 
 /**
- * Bộ 4 ảnh fallback chuẩn theo từng category của places_v2
+ * Bộ 4 ảnh đại diện chính và pool đa dạng (6 ảnh/danh mục) theo category của places_v2
  */
-export const CATEGORY_FALLBACK_IMAGES: Record<PlaceCategoryCode, string> = {
-  attraction:
+export const CATEGORY_FALLBACK_IMAGE_POOLS: Record<PlaceCategoryCode, string[]> = {
+  attraction: [
     'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=800&q=80',
-  restaurant:
+    'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1555921015-5532091f6026?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1504457047772-27faf1c00561?auto=format&fit=crop&w=800&q=80',
+  ],
+  restaurant: [
     'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
-  cafe:
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=800&q=80',
+  ],
+  cafe: [
     'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80',
-  hotel:
+    'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80',
+  ],
+  hotel: [
     'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=800&q=80',
+  ],
+};
+
+export const CATEGORY_FALLBACK_IMAGES: Record<PlaceCategoryCode, string> = {
+  attraction: CATEGORY_FALLBACK_IMAGE_POOLS.attraction[0],
+  restaurant: CATEGORY_FALLBACK_IMAGE_POOLS.restaurant[0],
+  cafe: CATEGORY_FALLBACK_IMAGE_POOLS.cafe[0],
+  hotel: CATEGORY_FALLBACK_IMAGE_POOLS.hotel[0],
 };
 
 const SUBCATEGORY_LABEL_MAP: Record<string, string> = {
@@ -71,9 +102,25 @@ export function normalizeCategoryCode(rawCategory?: string | null): PlaceCategor
   return 'attraction';
 }
 
-export function getPlaceFallbackImage(category?: string | null): string {
+export function getPlaceFallbackImage(
+  category?: string | null,
+  seed?: string | number | null
+): string {
   const code = normalizeCategoryCode(category);
-  return CATEGORY_FALLBACK_IMAGES[code] || CATEGORY_FALLBACK_IMAGES.attraction;
+  const pool =
+    CATEGORY_FALLBACK_IMAGE_POOLS[code] || CATEGORY_FALLBACK_IMAGE_POOLS.attraction;
+
+  if (seed === undefined || seed === null || String(seed).trim() === '') {
+    return pool[0];
+  }
+
+  // Băm ổn định theo placeId/tên để các địa điểm cùng category không bị trùng ảnh liền kề
+  const str = String(seed);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return pool[hash % pool.length];
 }
 
 export function formatRatingLabel(rating?: number | null): string {
@@ -185,11 +232,12 @@ export function normalizePlace(raw: Partial<Place> & Record<string, unknown>): P
     ? String(raw.province)
     : undefined;
 
+  const resolvedPlaceId = Number(raw.placeId ?? raw.id ?? 0);
   const rawPhoto = raw.photoUrl ?? raw.imageUrl;
   const photoUrl =
     rawPhoto && String(rawPhoto).trim() !== ''
       ? String(rawPhoto).trim()
-      : getPlaceFallbackImage(categoryCode);
+      : getPlaceFallbackImage(categoryCode, resolvedPlaceId || String(raw.name ?? ''));
 
   const address =
     raw.address && String(raw.address).trim() !== ''

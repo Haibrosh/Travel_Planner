@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import Link from 'next/link';
 import {
   DndContext,
   DragOverlay,
@@ -28,13 +27,12 @@ import {
   AlertCircle,
   CalendarDays,
   Check,
+  CheckCircle2,
   Clock,
-  Compass,
   GripVertical,
   MapPin,
   Pencil,
   Plus,
-  Route,
   Search,
   Sparkles,
   Star,
@@ -45,8 +43,12 @@ import {
 import type { TripResponse } from '@/types/trip';
 import type { Place as MapPlace } from '@/types/place';
 import type { Place as ExplorePlace } from '@/types/explore';
-import type { ItineraryItemResponse } from '@/services/itinerary.service';
+import {
+  sortItineraryItems,
+  type ItineraryItemResponse,
+} from '@/services/itinerary.service';
 import TripMapLoader from '@/components/map/TripMapLoader';
+import { ItineraryDayHeader } from '@/components/trip-workspace/ItineraryDayHeader';
 import { useTripUiStore } from '@/store/useTripUiStore';
 import { useMapStore } from '@/store/useMapStore';
 import { useMapHoverStore } from '@/store/useMapHoverStore';
@@ -177,7 +179,7 @@ function SortableItineraryCard({
   onMoveToDay,
 }: SortableItineraryCardProps) {
   const { place } = item;
-  const fallbackImg = getPlaceFallbackImage(place.category);
+  const fallbackImg = getPlaceFallbackImage(place.category, place.placeId);
   const hasRating =
     place.rating !== null &&
     place.rating !== undefined &&
@@ -188,6 +190,13 @@ function SortableItineraryCard({
   const [draftEnd, setDraftEnd] = useState(item.endTime ?? '');
   const [draftNote, setDraftNote] = useState(item.note ?? '');
   const [timeError, setTimeError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = setTimeout(() => setJustSaved(false), 1400);
+    return () => clearTimeout(timer);
+  }, [justSaved]);
 
   const {
     attributes,
@@ -242,6 +251,7 @@ function SortableItineraryCard({
       note: draftNote.trim(),
     });
     setIsEditing(false);
+    setJustSaved(true);
   };
 
   return (
@@ -255,9 +265,11 @@ function SortableItineraryCard({
       className={`group relative flex items-start gap-2.5 rounded-2xl border p-3.5 transition-all cursor-pointer ${
         isDragging
           ? 'border-teal-500/70 bg-teal-50/30 opacity-40'
-          : isSelected
-            ? 'border-teal-600 bg-teal-50/40 shadow-xs dark:bg-teal-950/20'
-            : 'border-zinc-200 bg-white hover:border-teal-400 hover:shadow-2xs dark:border-zinc-800 dark:bg-zinc-900'
+          : justSaved
+            ? 'border-emerald-500 bg-emerald-50/30 ring-2 ring-emerald-400/80 dark:bg-emerald-950/20'
+            : isSelected
+              ? 'border-teal-600 bg-teal-50/40 shadow-xs dark:bg-teal-950/20'
+              : 'border-zinc-200 bg-white hover:border-teal-400 hover:shadow-2xs dark:border-zinc-800 dark:bg-zinc-900'
       }`}
     >
       {/* Tay nắm kéo thả (@dnd-kit) */}
@@ -300,9 +312,17 @@ function SortableItineraryCard({
       {/* Thông tin địa điểm + Giờ tham quan + Ghi chú */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-1.5">
-          <h4 className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100 truncate">
-            {place.name}
-          </h4>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h4 className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100 truncate">
+              {place.name}
+            </h4>
+            {justSaved && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 animate-in fade-in duration-150 dark:bg-emerald-950/60 dark:text-emerald-300">
+                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                Đã lưu
+              </span>
+            )}
+          </div>
 
           <div
             className="flex items-center gap-1 shrink-0"
@@ -546,11 +566,23 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
   const setSelectedPlaceId = useMapStore((s) => s.setSelectedPlaceId);
   const setHoveredPlaceId = useMapHoverStore((s) => s.setHoveredPlaceId);
 
-  // State bộ lọc cho Pool địa điểm trong Workspace
+  // State bộ lọc cho Pool địa điểm trong Workspace, lọc bản đồ & Toast tối ưu lộ trình
   const [poolSearch, setPoolSearch] = useState('');
   const [debouncedPoolSearch, setDebouncedPoolSearch] = useState('');
   const [poolCategory, setPoolCategory] = useState<string>('all');
   const [activeDragItemId, setActiveDragItemId] = useState<number | null>(null);
+  const [isFilteredByMap, setIsFilteredByMap] = useState<boolean>(true);
+  const [optimizeToast, setOptimizeToast] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    subMessage?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!optimizeToast) return;
+    const timer = setTimeout(() => setOptimizeToast(null), 4500);
+    return () => clearTimeout(timer);
+  }, [optimizeToast]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -669,24 +701,45 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
     return counts;
   }, [itineraryItems]);
 
-  // Chuyển đổi dayItems sang định dạng MapPlace cho TripMapLoader
+  // Chuyển đổi danh sách địa điểm sang định dạng MapPlace cho TripMapLoader
+  // - Khi isFilteredByMap = true: chỉ hiển thị các địa điểm của ngày đang chọn
+  // - Khi isFilteredByMap = false: hiển thị toàn bộ địa điểm đã xếp ngày của chuyến đi (khử trùng lặp placeId)
   const mapPlaces = useMemo<MapPlace[]>(() => {
-    return dayItems
-      .filter(
-        (item) =>
-          item.place.latitude !== null &&
-          item.place.latitude !== undefined &&
-          item.place.longitude !== null &&
-          item.place.longitude !== undefined
-      )
-      .map((item) => ({
-        id: String(item.place.placeId),
+    const sourceItems = isFilteredByMap
+      ? dayItems
+      : sortItineraryItems(
+          itineraryItems.filter(
+            (item) => item.dayNumber !== null && item.dayNumber > 0
+          )
+        );
+
+    const seenPlaceIds = new Set<string>();
+    const result: MapPlace[] = [];
+
+    for (const item of sourceItems) {
+      if (
+        item.place.latitude === null ||
+        item.place.latitude === undefined ||
+        item.place.longitude === null ||
+        item.place.longitude === undefined
+      ) {
+        continue;
+      }
+      const placeKey = String(item.place.placeId);
+      if (seenPlaceIds.has(placeKey)) continue;
+      seenPlaceIds.add(placeKey);
+
+      result.push({
+        id: placeKey,
         name: item.place.name,
         lat: Number(item.place.latitude),
         lng: Number(item.place.longitude),
         category: item.place.category,
-      }));
-  }, [dayItems]);
+      });
+    }
+
+    return result;
+  }, [dayItems, itineraryItems, isFilteredByMap]);
 
   // Xử lý chuyển một địa điểm sang ngày khác (bằng kéo thả lên chip Ngày hoặc chọn từ dropdown)
   const handleMoveItemToDay = (movedItem: ItineraryItemResponse, targetDayNum: number) => {
@@ -853,6 +906,40 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
     });
   };
 
+  // Xử lý tối ưu lộ trình di chuyển trong ngày & hiển thị Toast thông báo kết quả
+  const handleOptimizeRoute = () => {
+    if (dayItems.length < 2 || optimizeRouteMutation.isPending) return;
+
+    optimizeRouteMutation.mutate(
+      {
+        tripId: trip.tripId,
+        dayNumber: activeDayNum,
+      },
+      {
+        onSuccess: (result, variables) => {
+          const savedValue = Number(result.distanceSavedKm ?? 0);
+          const beforeValue = Number(result.distanceBeforeKm ?? 0);
+          const afterValue = Number(result.distanceAfterKm ?? 0);
+          setOptimizeToast({
+            type: 'success',
+            message: `Đã sắp xếp lại lộ trình! Tiết kiệm được ${savedValue.toFixed(1)} km di chuyển`,
+            subMessage:
+              savedValue > 0
+                ? `Quãng đường Ngày ${variables.dayNumber}: ${beforeValue.toFixed(1)} km → ${afterValue.toFixed(1)} km`
+                : `Lộ trình Ngày ${variables.dayNumber} hiện tại đã ở thứ tự ngắn nhất (${afterValue.toFixed(1)} km)`,
+          });
+        },
+        onError: (err) => {
+          setOptimizeToast({
+            type: 'error',
+            message: 'Không thể tối ưu lộ trình lúc này.',
+            subMessage: err?.message || 'Vui lòng thử lại sau.',
+          });
+        },
+      }
+    );
+  };
+
   return (
     <div className="flex h-[calc(100vh-125px)] w-full overflow-hidden">
       {/* Cột trái: Timeline lịch trình các ngày & Pool địa điểm */}
@@ -888,46 +975,17 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
 
           {/* Nội dung ngày được chọn */}
           <div className="flex-1 p-5 space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-50">
-                  Lộ trình Ngày {activeDayNum}
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 tabular-nums">
-                  {activeDay.dateLabel} • {dayItems.length} địa điểm đã lên lịch
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {dayItems.length >= 2 && (
-                  <button
-                    type="button"
-                    disabled={optimizeRouteMutation.isPending}
-                    onClick={() =>
-                      optimizeRouteMutation.mutate({
-                        tripId: trip.tripId,
-                        dayNumber: activeDayNum,
-                      })
-                    }
-                    title="Tối ưu thứ tự di chuyển ngắn nhất bằng thuật toán 2-Opt"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:border-teal-500 hover:text-teal-700 transition-colors cursor-pointer disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-                  >
-                    <Route className="w-3.5 h-3.5 text-teal-600" />
-                    <span>
-                      {optimizeRouteMutation.isPending ? 'Đang tối ưu...' : 'Tối ưu lộ trình'}
-                    </span>
-                  </button>
-                )}
-
-                <Link
-                  href="/explore"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-teal-600/30 bg-teal-50/70 px-3 py-1.5 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors"
-                >
-                  <Compass className="w-3.5 h-3.5 text-teal-600" />
-                  <span>Khám phá thêm</span>
-                </Link>
-              </div>
-            </div>
+            <ItineraryDayHeader
+              dayNumber={activeDayNum}
+              currentDate={activeDay.dateLabel}
+              totalPlaces={dayItems.length}
+              isFilteredByMap={isFilteredByMap}
+              onToggleMapFilter={() => setIsFilteredByMap((prev) => !prev)}
+              canOptimize={dayItems.length >= 2}
+              isOptimizing={optimizeRouteMutation.isPending}
+              onOptimizeRoute={handleOptimizeRoute}
+              exploreHref="/explore"
+            />
 
             {/* 1. Danh sách các địa điểm trong ngày đang chọn (Sortable + Optimistic Reorder + Inline Note/Time Edit) */}
             {isItineraryLoading ? (
@@ -941,8 +999,8 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
               </div>
             ) : dayItems.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 p-7 text-center dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-lg text-teal-600 mb-2">
-                  📍
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-600 mb-2">
+                  <MapPin className="w-5 h-5" />
                 </div>
                 <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                   Chưa có địa điểm nào trong Ngày {activeDayNum}
@@ -1001,7 +1059,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
                 <div className="space-y-2">
                   {unassignedPoolItems.map((item) => {
                     const { place } = item;
-                    const fallbackImg = getPlaceFallbackImage(place.category);
+                    const fallbackImg = getPlaceFallbackImage(place.category, place.placeId);
                     return (
                       <div
                         key={item.itemId}
@@ -1118,7 +1176,7 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
               ) : (
                 <div className="space-y-2.5">
                   {poolPlaces.map((place) => {
-                    const fallbackImg = getPlaceFallbackImage(place.category);
+                    const fallbackImg = getPlaceFallbackImage(place.category, place.placeId);
                     const alreadyInActiveDay = dayItems.some(
                       (i) => Number(i.place.placeId) === Number(place.placeId)
                     );
@@ -1205,7 +1263,10 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
                 <img
                   src={
                     activeDragEntry.item.place.photoUrl ||
-                    getPlaceFallbackImage(activeDragEntry.item.place.category)
+                    getPlaceFallbackImage(
+                      activeDragEntry.item.place.category,
+                      activeDragEntry.item.place.placeId
+                    )
                   }
                   alt={activeDragEntry.item.place.name}
                   className="h-full w-full object-cover"
@@ -1230,6 +1291,43 @@ export default function ItineraryTab({ trip }: ItineraryTabProps) {
       <div className="hidden md:block flex-1 h-full relative bg-zinc-100 dark:bg-zinc-950">
         <TripMapLoader places={mapPlaces} dayNumber={activeDayNum} />
       </div>
+
+      {/* Toast thông báo kết quả tối ưu lộ trình */}
+      {optimizeToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-5 right-5 z-50 max-w-md rounded-2xl border bg-white p-4 shadow-xl flex items-start gap-3 animate-in slide-in-from-bottom-3 duration-200 dark:bg-zinc-900 ${
+            optimizeToast.type === 'success'
+              ? 'border-teal-200 dark:border-teal-800'
+              : 'border-rose-200 dark:border-rose-800'
+          }`}
+        >
+          {optimizeToast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-teal-600 shrink-0 mt-0.5 dark:text-teal-400" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 dark:text-rose-400" />
+          )}
+          <div className="flex-1 min-w-0 text-xs">
+            <p className="font-extrabold text-slate-900 dark:text-zinc-100">
+              {optimizeToast.message}
+            </p>
+            {optimizeToast.subMessage && (
+              <p className="text-slate-500 mt-0.5 tabular-nums dark:text-zinc-400">
+                {optimizeToast.subMessage}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOptimizeToast(null)}
+            aria-label="Đóng thông báo"
+            className="text-slate-400 hover:text-slate-600 cursor-pointer dark:hover:text-zinc-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -352,11 +352,35 @@ export function useOptimizeDayRouteMutation(defaultTripId?: string | number) {
       }
       return itineraryService.optimizeDayRoute(targetTripId, dayNumber);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       const targetTripId = variables.tripId ?? defaultTripId;
       if (targetTripId) {
+        const key = String(targetTripId);
+        const previousItems = queryClient.getQueryData<ItineraryItemResponse[]>([
+          'itinerary',
+          key,
+        ]);
+
+        if (data.orderedItems.length > 0) {
+          const normalizedDayItems: ItineraryItemResponse[] = data.orderedItems.map(
+            (item, idx) => ({
+              ...item,
+              dayNumber: variables.dayNumber,
+              orderIndex: idx + 1,
+              positionIndex: idx + 1,
+            })
+          );
+          const otherDaysItems = (previousItems ?? []).filter(
+            (item) => item.dayNumber !== variables.dayNumber
+          );
+          queryClient.setQueryData<ItineraryItemResponse[]>(
+            ['itinerary', key],
+            sortItineraryItems([...otherDaysItems, ...normalizedDayItems])
+          );
+        }
+
         queryClient.invalidateQueries({
-          queryKey: ['itinerary', String(targetTripId)],
+          queryKey: ['itinerary', key],
         });
       }
     },

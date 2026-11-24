@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, ArrowRight, X } from 'lucide-react';
 import { Navbar, NavTabType } from '@/components/layout/Navbar';
 import { ExploreCategoryFilter, CategoryType } from '@/components/explore/ExploreCategoryFilter';
 import { ExploreFilterBar } from '@/components/explore/ExploreFilterBar';
-import { ExploreCard } from '@/components/cards/ExploreCard';
 import { ExplorePagination } from '@/components/explore/ExplorePagination';
+import { ExploreCard } from '@/components/cards/ExploreCard';
 import { AddToTripModal, type AddToTripSelection } from '@/components/modals/AddToTripModal';
 import { PlaceDetailModal, PlaceDetailData } from '@/components/modals/PlaceDetailModal';
 import { PROVINCES_LIST } from '@/mocks/exploreData';
@@ -17,14 +17,24 @@ import { useAddItineraryItemMutation } from '@/hooks/useItinerary';
 import { getPlaceFallbackImage } from '@/services/explore.service';
 import type { Place } from '@/types/explore';
 
-export default function ExplorePage() {
+function ExplorePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentNavTab, setCurrentNavTab] = useState<NavTabType>('explore');
 
+  const urlProvinceParam = searchParams.get('province') || '';
+  const urlDestinationIdParam = searchParams.get('destinationId') || '';
+
   // State bộ lọc & sắp xếp
-  const [selectedProvince, setSelectedProvince] = useState<string>('');
-  const [rawSearchQuery, setRawSearchQuery] = useState<string>('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
+  const [selectedProvince, setSelectedProvince] = useState<string>(
+    () => urlProvinceParam || urlDestinationIdParam
+  );
+  const [rawSearchQuery, setRawSearchQuery] = useState<string>(
+    () => searchParams.get('q') || ''
+  );
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>(
+    () => searchParams.get('q') || ''
+  );
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all');
   const [sortBy, setSortBy] = useState<string>('popular');
 
@@ -77,10 +87,16 @@ export default function ExplorePage() {
     const found = destinations?.find(
       (d) =>
         d.name.toLowerCase() === selectedProvince.toLowerCase() ||
-        d.fullName?.toLowerCase() === selectedProvince.toLowerCase()
+        d.fullName?.toLowerCase() === selectedProvince.toLowerCase() ||
+        d.provinceCode === selectedProvince ||
+        d.slug === selectedProvince
     );
-    return found?.provinceCode || selectedProvince;
-  }, [selectedProvince, destinations]);
+    if (found) return found.provinceCode;
+    if (urlDestinationIdParam && selectedProvince === urlProvinceParam) {
+      return urlDestinationIdParam;
+    }
+    return selectedProvince;
+  }, [selectedProvince, destinations, urlDestinationIdParam, urlProvinceParam]);
 
   // 2. Lấy danh sách địa điểm từ API GET /api/v1/places
   const {
@@ -121,7 +137,8 @@ export default function ExplorePage() {
       address: place.address,
       rating: place.rating,
       reviewCount: place.reviewCount,
-      imageUrl: place.photoUrl || getPlaceFallbackImage(place.category),
+      imageUrl:
+        place.photoUrl || getPlaceFallbackImage(place.category, place.placeId),
       description: place.description,
       openingHours: place.openingHours,
       phone: place.phone,
@@ -177,7 +194,7 @@ export default function ExplorePage() {
         }}
         onNotificationClick={() => router.push('/my-trips')}
         onUserClick={() => router.push('/my-trips')}
-        onLogoClick={() => router.push('/explore')}
+        onLogoClick={() => router.push('/')}
       />
 
       {/* Toast thông báo khi vừa thêm địa điểm vào chuyến đi */}
@@ -303,7 +320,10 @@ export default function ExplorePage() {
                   key={place.placeId}
                   id={place.placeId}
                   title={place.name}
-                  imageUrl={place.photoUrl || getPlaceFallbackImage(place.category)}
+                  imageUrl={
+                    place.photoUrl ||
+                    getPlaceFallbackImage(place.category, place.placeId)
+                  }
                   category={place.category}
                   rating={place.rating}
                   reviewCount={place.reviewCount}
@@ -365,7 +385,9 @@ export default function ExplorePage() {
               address: detail.address || 'Việt Nam',
               rating: detail.rating ?? null,
               reviewCount: detail.reviewCount ?? null,
-              photoUrl: detail.imageUrl || getPlaceFallbackImage(detail.category),
+              photoUrl:
+                detail.imageUrl ||
+                getPlaceFallbackImage(detail.category, detail.id),
               latitude: detail.latitude ?? null,
               longitude: detail.longitude ?? null,
               description: detail.description ?? null,
@@ -387,5 +409,19 @@ export default function ExplorePage() {
         onSaveTripDay={handleSaveToItinerary}
       />
     </div>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-sm font-semibold text-slate-500">
+          Đang tải trang khám phá...
+        </div>
+      }
+    >
+      <ExplorePageContent />
+    </Suspense>
   );
 }
