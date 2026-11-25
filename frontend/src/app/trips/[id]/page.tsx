@@ -1,23 +1,74 @@
 'use client';
 
-import React, { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTrip } from '@/hooks/useTrips';
-import { useTripUiStore, type TripTab } from '@/store/useTripUiStore';
-import { ItineraryTab } from '@/components/trip-workspace/ItineraryTab';
+import {
+  useAddItineraryItemMutation,
+  useDeleteItineraryItemMutation,
+  useItineraryQuery,
+  useOptimizeDayRouteMutation,
+  useReorderItineraryMutation,
+  useUpdateItineraryItemMutation,
+} from '@/hooks/useItinerary';
+import { useTripUiStore } from '@/store/useTripUiStore';
+import { useMapStore } from '@/store/useMapStore';
+import {
+  CATEGORY_LABEL_MAP,
+  getPlaceFallbackImage,
+} from '@/services/explore.service';
+import type { Place as ExplorePlace } from '@/types/explore';
+import type { ItineraryItemResponse } from '@/services/itinerary.service';
+import { TripHeaderCard } from '@/components/trip-workspace/TripHeaderCard';
+import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNav';
+import { ItineraryTab, ItineraryItem } from '@/components/trip-workspace/ItineraryTab';
 import { TripBudgetPanel } from '@/components/trip-workspace/TripBudgetPanel';
-import { TripMembersPanel, type MemberItem } from '@/components/trip-workspace/TripMembersPanel';
-import { ChecklistTab, type ChecklistItem } from '@/components/trip-workspace/ChecklistTab';
-import type { ExpenseItem } from '@/components/cards/TotalExpenseCard';
+import { ChecklistTab, ChecklistItem } from '@/components/trip-workspace/ChecklistTab';
+import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
+import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
+import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
+import { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
+import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
+import { ExpenseItem } from '@/components/cards/TotalExpenseCard';
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+function mapApiItemToActivity(item: ItineraryItemResponse, idx: number): ItineraryItem {
+  const { place } = item;
+  const timeRange =
+    item.startTime && item.endTime
+      ? `${item.startTime} - ${item.endTime}`
+      : item.startTime
+        ? `Từ ${item.startTime}`
+        : item.endTime
+          ? `Đến ${item.endTime}`
+          : '8:00 AM - 9:30 AM';
+
+  return {
+    id: item.itemId,
+    title: place.name,
+    timeRange,
+    category: [
+      CATEGORY_LABEL_MAP[place.category] || place.subcategory || 'Tham quan',
+    ],
+    note: item.note ?? '',
+    imageUrl: place.photoUrl || getPlaceFallbackImage(place.category),
+    address: place.address || '',
+    rating: place.rating ?? undefined,
+    isVisited: false,
+    top: `${28 + ((idx * 14) % 45)}%`,
+    left: `${35 + ((idx * 17) % 40)}%`,
+    rawItem: item,
+  };
+}
+
 export default function TripWorkspacePage({ params }: PageProps) {
   const { id } = use(params);
   const { data: trip, isLoading, isError, error } = useTrip(id);
-  const { activeTab, setActiveTab, setSelectedTripId } = useTripUiStore();
+  const { selectedDayNumber, setSelectedTripId } = useTripUiStore();
+  const { selectedPlace, openModal } = useMapStore();
 
   useEffect(() => {
     if (id) {
@@ -25,14 +76,23 @@ export default function TripWorkspacePage({ params }: PageProps) {
     }
   }, [id, setSelectedTripId]);
 
+  const numericTripId = Number(id);
+  const validTripId = !Number.isNaN(numericTripId) ? numericTripId : 0;
+
+  const { data: itineraryItems = [] } = useItineraryQuery(validTripId);
+  const addItemMutation = useAddItineraryItemMutation(validTripId);
+  const updateItemMutation = useUpdateItineraryItemMutation(validTripId);
+  const deleteItemMutation = useDeleteItineraryItemMutation(validTripId);
+  const reorderMutation = useReorderItineraryMutation(validTripId);
+  const optimizeRouteMutation = useOptimizeDayRouteMutation(validTripId);
+
+  const [activeTab, setActiveTab] = useState<TripTabType>('timeline');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isFilteredByMap, setIsFilteredByMap] = useState(false);
+
+  const [fundBalance, setFundBalance] = useState(10000000);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([
-    {
-      id: 1,
-      title: 'Thuê xe di chuyển',
-      amount: 150000,
-      category: 'Di chuyển',
-      paidBy: 'Thành viên 1',
-    },
+    { id: 1, title: 'Thuê xe di chuyển', amount: 150000, category: 'Di chuyển', paidBy: 'Thành viên 1' },
   ]);
 
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([
@@ -43,135 +103,235 @@ export default function TripWorkspacePage({ params }: PageProps) {
   ]);
 
   const [members, setMembers] = useState<MemberItem[]>([
-    {
-      id: 1,
-      name: 'Trưởng nhóm',
-      email: 'leader@example.com',
-      avatarBgColor: 'bg-teal-600',
-      isLeader: true,
-    },
-    {
-      id: 2,
-      name: 'Thành viên 1',
-      email: 'member1@example.com',
-      avatarBgColor: 'bg-emerald-700',
-      isLeader: false,
-    },
+    { id: 1, name: 'Trưởng nhóm', email: 'leader@example.com', avatarBgColor: 'bg-teal-600', isLeader: true },
+    { id: 2, name: 'Thành viên 1', email: 'member1@example.com', avatarBgColor: 'bg-emerald-700', isLeader: false },
   ]);
 
-  const tabs: { key: TripTab; label: string; icon: string }[] = [
-    { key: 'itinerary', label: 'Lịch trình', icon: '📅' },
-    { key: 'budget', label: 'Chi phí', icon: '💰' },
-    { key: 'checklist', label: 'Hành lý', icon: '🧳' },
-    { key: 'collab', label: 'Cộng tác', icon: '👥' },
-  ];
+  const formatDateVN = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const [year, month, day] = dateStr.split('-');
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const dayApiItems = useMemo(
+    () =>
+      itineraryItems
+        .filter((item) => item.dayNumber === selectedDayNumber)
+        .sort((a, b) => a.positionIndex - b.positionIndex),
+    [itineraryItems, selectedDayNumber]
+  );
+
+  const activities = useMemo<ItineraryItem[]>(
+    () => dayApiItems.map((item, idx) => mapApiItemToActivity(item, idx)),
+    [dayApiItems]
+  );
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full flex-col bg-zinc-50 dark:bg-zinc-950">
-        <div className="h-14 border-b border-zinc-200 bg-white px-6 flex items-center animate-pulse dark:border-zinc-800 dark:bg-zinc-900" />
-        <div className="flex-1 p-8">
-          <div className="h-8 w-64 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse mb-4" />
-          <div className="h-4 w-40 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-        </div>
+      <div className="flex h-screen items-center justify-center bg-slate-50 font-['Plus_Jakarta_Sans',sans-serif]">
+        <p className="text-sm font-bold text-slate-500 animate-pulse">
+          Đang tải không gian chuyến đi...
+        </p>
       </div>
     );
   }
 
   if (isError || !trip) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-950 text-center">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900 max-w-md w-full shadow-xs">
-          <span className="text-3xl mb-3 block">⚠️</span>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-            Không tìm thấy chuyến đi
-          </h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            {error?.message || 'Chuyến đi không tồn tại hoặc bạn không có quyền truy cập.'}
+      <div className="flex h-screen flex-col items-center justify-center p-6 bg-slate-50 text-center font-['Plus_Jakarta_Sans',sans-serif]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 max-w-md w-full shadow-sm">
+          <h2 className="text-base font-bold text-slate-900">Không tìm thấy chuyến đi</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {error?.message || 'Đã xảy ra lỗi khi kết nối dữ liệu.'}
           </p>
           <Link
             href="/my-trips"
-            className="mt-5 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
+            className="mt-5 inline-block rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-700"
           >
-            ← Quay lại danh sách chuyến đi
+            Quay lại danh sách chuyến đi
           </Link>
         </div>
       </div>
     );
   }
 
+  const tripInfo: TripSettingsData = {
+    title: trip.name,
+    location: trip.description || 'Chưa có mô tả chuyến đi',
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    budget: '10,000,000 đ',
+    isArchived: trip.status === 'ARCHIVED',
+    isCompleted: trip.status === 'COMPLETED',
+  };
+
+  const formattedDateRange = `${formatDateVN(trip.startDate)} - ${formatDateVN(trip.endDate)}`;
+  const displayedActivities = isFilteredByMap ? activities.slice(0, 1) : activities;
+
+  const mapPins: MapPinItem[] = displayedActivities.map((act, index) => ({
+    id: act.id,
+    index: index + 1,
+    title: act.title,
+    category: act.category[0] || 'Khám phá',
+    address: act.address || '',
+    rating: act.rating,
+    imageUrl: act.imageUrl,
+    isVisited: act.isVisited,
+    top: act.top || '50%',
+    left: act.left || '50%',
+  }));
+
+  const handleSelectActivity = (act: ItineraryItem) => {
+    openModal({
+      id: act.id,
+      title: act.title,
+      category: act.category[0] || 'Khám phá',
+      address: act.address,
+      rating: act.rating,
+      imageUrl: act.imageUrl,
+      isVisited: act.isVisited,
+    });
+  };
+
+  const handleAddLocation = (loc: LocationSuggestion) => {
+    const numericPlaceId = Number(loc.id);
+    if (!Number.isNaN(numericPlaceId) && numericPlaceId > 0) {
+      const snapshot: ExplorePlace = {
+        placeId: numericPlaceId,
+        name: loc.name,
+        category: 'attraction',
+        address: loc.address || '',
+        photoUrl: getPlaceFallbackImage('attraction'),
+        rating: null,
+        reviewCount: 0,
+      };
+      addItemMutation.mutate({
+        tripId: trip.tripId,
+        placeId: numericPlaceId,
+        dayNumber: selectedDayNumber,
+        placeSnapshot: snapshot,
+      });
+    }
+  };
+
+  const handleReorderActivities = (newActs: ItineraryItem[]) => {
+    const orderedIds = newActs.map((a) => Number(a.id));
+    const reorderedApi = [...dayApiItems]
+      .sort((a, b) => orderedIds.indexOf(a.itemId) - orderedIds.indexOf(b.itemId))
+      .map((item, idx) => ({
+        ...item,
+        orderIndex: idx + 1,
+        positionIndex: idx + 1,
+      }));
+
+    if (reorderedApi.length === 0) return;
+    const moved = reorderedApi[0];
+    const otherDays = itineraryItems.filter((i) => i.dayNumber !== selectedDayNumber);
+
+    reorderMutation.mutate({
+      tripId: trip.tripId,
+      items: reorderedApi.map((i) => ({
+        itemId: i.itemId,
+        dayNumber: selectedDayNumber,
+        orderIndex: i.orderIndex,
+      })),
+      movedItemId: moved.itemId,
+      targetDayNumber: selectedDayNumber,
+      prevItemId: null,
+      nextItemId: reorderedApi[1]?.itemId ?? null,
+      orderIndex: 1,
+      optimisticItems: [...otherDays, ...reorderedApi],
+    });
+  };
+
+  const handleDeleteActivity = (itemId: string | number) => {
+    const numericItemId = Number(itemId);
+    if (!Number.isNaN(numericItemId) && numericItemId > 0) {
+      deleteItemMutation.mutate({
+        tripId: trip.tripId,
+        itemId: numericItemId,
+      });
+    }
+  };
+
+  const handleUpdateActivity = (
+    itemId: string | number,
+    updatedData: { timeRange?: string; note?: string }
+  ) => {
+    const numericItemId = Number(itemId);
+    if (!Number.isNaN(numericItemId) && numericItemId > 0) {
+      const existing = itineraryItems.find((i) => i.itemId === numericItemId);
+      updateItemMutation.mutate({
+        tripId: trip.tripId,
+        itemId: numericItemId,
+        startTime: existing?.startTime ?? null,
+        endTime: existing?.endTime ?? null,
+        note: updatedData.note !== undefined ? updatedData.note : existing?.note ?? '',
+      });
+    }
+  };
+
+  const handleCreateNewTrip = (formData: NewTripFormData) => {
+    alert(`Đã tạo thành công chuyến đi "${formData.title}" tại ${formData.province}!`);
+    setIsCreateModalOpen(false);
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-zinc-50 dark:bg-zinc-950 overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
-      <header className="sticky top-0 z-30 shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/my-trips"
-              className="text-xs font-bold text-teal-700 hover:underline shrink-0"
-            >
-              ← Chuyến đi
-            </Link>
-            <h1 className="text-sm sm:text-base font-extrabold text-zinc-900 dark:text-zinc-50 truncate">
-              {trip.name}
-            </h1>
-          </div>
-
-          <nav className="hidden md:flex items-center gap-1.5">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                    isActive
-                      ? 'bg-[#14B8A6] text-white'
-                      : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  {tab.icon} {tab.label}
-                </button>
-              );
-            })}
-          </nav>
+    <div className="min-h-screen w-full bg-slate-50 flex overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* CỘT TRÁI */}
+      <div className="w-full lg:w-[56%] xl:w-[57%] h-screen flex flex-col bg-white border-r border-slate-200">
+        <div className="px-6 sm:px-8 pt-6 pb-4 flex flex-col gap-4 bg-white z-10 shrink-0 border-b border-slate-100">
+          <TripHeaderCard
+            title={tripInfo.title}
+            subtitle={tripInfo.location}
+            dateRange={formattedDateRange}
+            bannerUrl="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"
+            onBack={() => {
+              window.location.href = '/my-trips';
+            }}
+          />
+          <TripTabsNav activeTab={activeTab} onChangeTab={setActiveTab} />
         </div>
 
-        {/* Mobile Tab Bar */}
-        <div className="flex md:hidden border-t border-zinc-200 px-2 py-1 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60 overflow-x-auto">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 shrink-0 py-1.5 text-center text-xs font-medium rounded cursor-pointer ${
-                  isActive
-                    ? 'font-bold text-zinc-900 border-b-2 border-zinc-900 dark:text-zinc-50 dark:border-zinc-50'
-                    : 'text-zinc-500 dark:text-zinc-400'
-                }`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </header>
-
-      {/* Main Workspace Body */}
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
-        <div className="mx-auto max-w-7xl">
-          {activeTab === 'itinerary' && <ItineraryTab trip={trip} />}
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 flex flex-col gap-5 custom-scrollbar">
+          {activeTab === 'timeline' && (
+            <ItineraryTab
+              trip={trip}
+              currentDate={formatDateVN(trip.startDate)}
+              activities={activities}
+              selectedPlaceId={selectedPlace?.id}
+              onSelectActivity={handleSelectActivity}
+              onAddLocation={handleAddLocation}
+              onReorderActivities={handleReorderActivities}
+              onDeleteActivity={handleDeleteActivity}
+              onUpdateActivity={handleUpdateActivity}
+              isFilteredByMap={isFilteredByMap}
+              onToggleMapFilter={() => setIsFilteredByMap((prev) => !prev)}
+              onOptimizeRoute={() => {
+                if (dayApiItems.length >= 2) {
+                  optimizeRouteMutation.mutate({
+                    tripId: trip.tripId,
+                    dayNumber: selectedDayNumber,
+                  });
+                }
+              }}
+            />
+          )}
 
           {activeTab === 'budget' && (
             <TripBudgetPanel
+              fundBalance={fundBalance}
               expenses={expenses}
+              onUpdateBalance={(newVal) => setFundBalance(newVal)}
               onAddExpense={(newExp) =>
-                setExpenses((prev) => [{ id: Date.now(), ...newExp }, ...prev])
+                setExpenses([...expenses, { id: Date.now(), ...newExp }])
               }
               onDeleteExpense={(expId) =>
-                setExpenses((prev) => prev.filter((item) => item.id !== expId))
+                setExpenses(expenses.filter((item) => item.id !== expId))
               }
             />
           )}
@@ -198,24 +358,45 @@ export default function TripWorkspacePage({ params }: PageProps) {
             />
           )}
 
-          {activeTab === 'collab' && (
+          {activeTab === 'members' && (
             <TripMembersPanel
               members={members}
               inviteUrl={`http://TravelSync.com/invite/${id}`}
               onUpdateMember={(memberId, newName, newEmail) =>
-                setMembers((prev) =>
-                  prev.map((m) =>
+                setMembers(
+                  members.map((m) =>
                     m.id === memberId ? { ...m, name: newName, email: newEmail } : m
                   )
                 )
               }
               onDeleteMember={(memberId) =>
-                setMembers((prev) => prev.filter((m) => m.id !== memberId))
+                setMembers(members.filter((m) => m.id !== memberId))
               }
             />
           )}
+
+          {activeTab === 'settings' && (
+            <TripSettingsPanel
+              initialTrip={tripInfo}
+              onSaveSettings={() => {}}
+              onToggleArchive={() => {}}
+              onToggleComplete={() => {}}
+              onDeleteTrip={() => {}}
+            />
+          )}
         </div>
-      </main>
+      </div>
+
+      {/* CỘT PHẢI */}
+      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-screen relative">
+        <MapWorkspacePanel pins={mapPins} />
+      </div>
+
+      <CreateTripModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateNewTrip}
+      />
     </div>
   );
 }
