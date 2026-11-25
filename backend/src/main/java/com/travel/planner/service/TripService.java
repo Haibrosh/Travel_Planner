@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -25,6 +26,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class TripService {
+
+    private static final BigDecimal MAX_BUDGET = new BigDecimal("999999999999999");
 
     private final TripRepository tripRepository;
     private final DestinationRepository destinationRepository;
@@ -45,6 +48,7 @@ public class TripService {
                 .description(request.getDescription())
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
+                .budget(normalizeBudget(request.getBudget()))
                 .status("PLANNING")
                 .build();
 
@@ -88,6 +92,9 @@ public class TripService {
         trip.setDescription(request.getDescription());
         trip.setStartDate(request.getStartDate());
         trip.setEndDate(request.getEndDate());
+        if (request.getBudget() != null) {
+            trip.setBudget(normalizeBudget(request.getBudget()));
+        }
         tripRepository.saveAndFlush(trip);
 
         if (datesChanged) {
@@ -123,5 +130,24 @@ public class TripService {
     private Destination validateAndGetDestination(String provinceCode) {
         return destinationRepository.findById(provinceCode)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy điểm đến với mã tỉnh: " + provinceCode));
+    }
+
+    // Chuẩn hóa ngân sách dự kiến (NUMERIC(15, 0), >= 0, cho phép null nếu chưa thiết lập)
+    public static BigDecimal normalizeBudget(BigDecimal rawBudget) {
+        if (rawBudget == null) {
+            return null;
+        }
+        BigDecimal normalized = rawBudget.stripTrailingZeros();
+        if (normalized.scale() > 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến phải là số nguyên không âm (không có phần thập phân).");
+        }
+        BigDecimal integerBudget = normalized.setScale(0);
+        if (integerBudget.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến không được âm.");
+        }
+        if (integerBudget.compareTo(MAX_BUDGET) > 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến vượt quá giới hạn cho phép (tối đa 15 chữ số).");
+        }
+        return integerBudget;
     }
 }
