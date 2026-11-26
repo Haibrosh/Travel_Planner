@@ -16,13 +16,15 @@ import {
   type ExpenseCategory,
 } from '@/components/modals/AddExpenseModal';
 
-export interface TripBudgetPanelProps {
+export interface BudgetTabProps {
   fundBalance?: number;
   expenses?: ExpenseItem[];
   onUpdateBalance?: (newBalance: number) => void;
   onAddExpense?: (expense: Omit<ExpenseItem, 'id'>) => void;
   onDeleteExpense?: (id: string | number) => void;
 }
+
+const EMPTY_EXPENSES: ExpenseItem[] = [];
 
 const CATEGORIES: ExpenseCategory[] = [
   'Ăn uống',
@@ -69,9 +71,9 @@ const normalizeCategory = (raw?: string): ExpenseCategory => {
   return 'Ăn uống';
 };
 
-export const TripBudgetPanel: React.FC<TripBudgetPanelProps> = ({
+export const BudgetTab: React.FC<BudgetTabProps> = ({
   fundBalance = 10000000,
-  expenses = [],
+  expenses = EMPTY_EXPENSES,
   onUpdateBalance,
   onAddExpense,
   onDeleteExpense,

@@ -10,10 +10,10 @@ import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWo
 
 import { GroupFundCard } from '@/components/cards/GroupFundCard';
 import { TotalExpenseCard, ExpenseItem } from '@/components/cards/TotalExpenseCard';
-import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
-import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
-import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
+import { CollabTab, MemberItem } from '@/components/trips/workspace/CollabTab';
+import { SettingTab, SettingTabData } from '@/components/trips/workspace/SettingTab';
 import { useMapStore } from '@/store/useMapStore';
+import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
 
 export default function TripWorkspacePage() {
   const [activeTab, setActiveTab] = useState<TripTabType>('timeline');
@@ -25,7 +25,7 @@ export default function TripWorkspacePage() {
   const { selectedPlace, isModalOpen, openModal } = useMapStore();
 
   // State chung chuyến đi
-  const [tripInfo, setTripInfo] = useState<TripSettingsData>({
+  const [tripInfo, setTripInfo] = useState<SettingTabData>({
     title: 'ĐÀ LẠT MỘNG MƠ',
     location: 'Đà Lạt, Lâm Đồng',
     startDate: '2026-11-07',
@@ -155,16 +155,16 @@ export default function TripWorkspacePage() {
     setMembers(members.filter((m) => m.id !== id));
   };
 
-  const handleSaveSettings = (updatedData: TripSettingsData) => {
+  const handleSaveSettings = (updatedData: SettingTabData) => {
     setTripInfo(updatedData);
   };
 
   const handleToggleArchive = () => {
-    setTripInfo((prev: TripSettingsData) => ({ ...prev, isArchived: !prev.isArchived }));
+    setTripInfo((prev: SettingTabData) => ({ ...prev, isArchived: !prev.isArchived }));
   };
 
   const handleToggleComplete = () => {
-    setTripInfo((prev: TripSettingsData) => ({ ...prev, isCompleted: !prev.isCompleted }));
+    setTripInfo((prev: SettingTabData) => ({ ...prev, isCompleted: !prev.isCompleted }));
   };
 
   const handleDeleteTrip = () => {
@@ -239,7 +239,7 @@ export default function TripWorkspacePage() {
           )}
 
           {activeTab === 'members' && (
-            <TripMembersPanel
+            <CollabTab
               members={members}
               inviteUrl="http://TravelSync.com/invite/dalat-trip-2026"
               onUpdateMember={handleUpdateMember}
@@ -248,7 +248,7 @@ export default function TripWorkspacePage() {
           )}
 
           {activeTab === 'settings' && (
-            <TripSettingsPanel
+            <SettingTab
               initialTrip={tripInfo}
               onSaveSettings={handleSaveSettings}
               onToggleArchive={handleToggleArchive}

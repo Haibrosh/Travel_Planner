@@ -22,9 +22,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ItineraryDayHeader } from './ItineraryDayHeader';
+import { ItineraryDayHeader } from '@/components/trip-workspace/ItineraryDayHeader';
 import { TripActivityCard } from '@/components/cards/TripActivityCard';
-import { AddLocationBar, LocationSuggestion } from './AddLocationBar';
+import { AddLocationBar, LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
 
 export interface ItineraryItem {
   id: string | number;
@@ -42,10 +42,10 @@ export interface ItineraryItem {
 
 export interface ItineraryTabProps {
   currentDate?: string;
-  activities: ItineraryItem[];
+  activities?: ItineraryItem[];
   selectedPlaceId?: string | number;
-  onSelectActivity: (act: any) => void;
-  onAddLocation: (loc: LocationSuggestion) => void;
+  onSelectActivity?: (act: any) => void;
+  onAddLocation?: (loc: LocationSuggestion) => void;
   onReorderActivities?: (newActivities: ItineraryItem[]) => void;
   onUpdateActivity?: (id: string | number, updatedData: { timeRange?: string; note?: string }) => void;
   onDeleteActivity?: (id: string | number) => void;
@@ -59,7 +59,7 @@ interface SortableActivityRowProps {
   act: ItineraryItem;
   idx: number;
   selectedPlaceId?: string | number;
-  onSelectActivity: (act: any) => void;
+  onSelectActivity?: (act: any) => void;
   onUpdateActivity?: (id: string | number, updatedData: { timeRange?: string; note?: string }) => void;
   onDeleteActivity?: (id: string | number) => void;
   onOpenUpdateModal?: (act: any) => void;
@@ -99,7 +99,7 @@ const SortableActivityRow: React.FC<SortableActivityRowProps> = ({
         note={act.note}
         imageUrl={act.imageUrl}
         isSelected={selectedPlaceId === act.id}
-        onClick={() => onSelectActivity(act)}
+        onClick={() => onSelectActivity?.(act)}
         onUpdateActivity={(data) => onUpdateActivity?.(act.id, data)}
         onDeleteActivity={() => onDeleteActivity?.(act.id)}
         onOpenUpdateModal={() => onOpenUpdateModal?.(act)}
@@ -113,7 +113,7 @@ interface DroppableItineraryZoneProps {
   activities: ItineraryItem[];
   isDraggingActive: boolean;
   selectedPlaceId?: string | number;
-  onSelectActivity: (act: any) => void;
+  onSelectActivity?: (act: any) => void;
   onUpdateActivity?: (id: string | number, updatedData: { timeRange?: string; note?: string }) => void;
   onDeleteActivity?: (id: string | number) => void;
   onOpenUpdateModal?: (act: any) => void;
@@ -172,7 +172,7 @@ const DroppableItineraryZone: React.FC<DroppableItineraryZoneProps> = ({
 
 export const ItineraryTab: React.FC<ItineraryTabProps> = ({
   currentDate = '7/11',
-  activities,
+  activities = [],
   selectedPlaceId,
   onSelectActivity,
   onAddLocation,
@@ -184,6 +184,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
   onToggleMapFilter,
   onOptimizeRoute,
 }) => {
+  const safeActivities = activities ?? [];
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isOverDropzone, setIsOverDropzone] = useState(false);
 
@@ -193,9 +194,9 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
   );
 
   const activeIndex = activeId
-    ? activities.findIndex((item) => String(item.id) === activeId)
+    ? safeActivities.findIndex((item) => String(item.id) === activeId)
     : -1;
-  const activeItem = activeIndex >= 0 ? activities[activeIndex] : null;
+  const activeItem = activeIndex >= 0 ? safeActivities[activeIndex] : null;
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -212,11 +213,11 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
 
     if (!over || active.id === over.id) return;
 
-    const oldIndex = activities.findIndex((item) => String(item.id) === String(active.id));
-    const newIndex = activities.findIndex((item) => String(item.id) === String(over.id));
+    const oldIndex = safeActivities.findIndex((item) => String(item.id) === String(active.id));
+    const newIndex = safeActivities.findIndex((item) => String(item.id) === String(over.id));
 
     if (oldIndex !== -1 && newIndex !== -1) {
-      const reordered = arrayMove(activities, oldIndex, newIndex);
+      const reordered = arrayMove(safeActivities, oldIndex, newIndex);
       onReorderActivities?.(reordered);
     }
   };
@@ -228,17 +229,16 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-200 pb-8">
-      {/* 1. Header Ngày */}
       <ItineraryDayHeader
         currentDate={currentDate}
-        totalPlaces={activities.length}
+        totalPlaces={safeActivities.length}
         isFilteredByMap={isFilteredByMap}
         onToggleMapFilter={onToggleMapFilter}
         onOptimizeRoute={onOptimizeRoute}
       />
 
-      {/* 2. Danh sách hoạt động tích hợp kéo thả @dnd-kit */}
       <DndContext
+        id="itinerary-dnd-context"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
@@ -247,7 +247,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
         onDragCancel={handleDragCancel}
       >
         <DroppableItineraryZone
-          activities={activities}
+          activities={safeActivities}
           isDraggingActive={Boolean(activeId) && isOverDropzone}
           selectedPlaceId={selectedPlaceId}
           onSelectActivity={onSelectActivity}
@@ -273,9 +273,8 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({
         </DragOverlay>
       </DndContext>
 
-      {/* 3. Thanh thêm địa điểm nhanh */}
       <div className="mt-2">
-        <AddLocationBar onSelectLocation={onAddLocation} />
+        <AddLocationBar onSelectLocation={(loc) => onAddLocation?.(loc)} />
       </div>
     </div>
   );

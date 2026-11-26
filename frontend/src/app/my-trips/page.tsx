@@ -4,10 +4,10 @@ import React, { useState, use } from 'react';
 import Link from 'next/link';
 import { TripHeaderCard } from '@/components/trip-workspace/TripHeaderCard';
 import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNav';
-import { ItineraryTab } from '@/components/trip-workspace/ItineraryTab';
-import { TripBudgetPanel } from '@/components/trip-workspace/TripBudgetPanel';
-import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
-import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
+import { ItineraryTab } from '@/components/trips/workspace/ItineraryTab';
+import { BudgetTab } from '@/components/trips/workspace/BudgetTab';
+import { CollabTab, MemberItem } from '@/components/trips/workspace/CollabTab';
+import { SettingTab, SettingTabData } from '@/components/trips/workspace/SettingTab';
 import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
 import { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
 import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
@@ -27,7 +27,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
   const { selectedPlace, isModalOpen, openModal } = useMapStore();
 
   // State chung chuyến đi
-  const [tripInfo, setTripInfo] = useState<TripSettingsData>({
+  const [tripInfo, setTripInfo] = useState<SettingTabData>({
     title: 'ĐÀ LẠT MỘNG MƠ',
     location: 'Đà Lạt, Lâm Đồng',
     startDate: '2026-11-07',
@@ -178,7 +178,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'budget' && (
-            <TripBudgetPanel
+            <BudgetTab
               fundBalance={fundBalance}
               expenses={expenses}
               onUpdateBalance={(newVal) => setFundBalance(newVal)}
@@ -188,7 +188,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'members' && (
-            <TripMembersPanel
+            <CollabTab
               members={members}
               inviteUrl={`http://TravelSync.com/invite/${id}`}
               onUpdateMember={(memberId, newName, newEmail) =>
@@ -199,7 +199,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'settings' && (
-            <TripSettingsPanel
+            <SettingTab
               initialTrip={tripInfo}
               onSaveSettings={(updated) => setTripInfo(updated)}
               onToggleArchive={() => setTripInfo((prev) => ({ ...prev, isArchived: !prev.isArchived }))}

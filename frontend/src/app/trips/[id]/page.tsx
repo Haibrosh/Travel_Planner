@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useTrip } from '@/hooks/useTrips';
 import { TripHeaderCard } from '@/components/trip-workspace/TripHeaderCard';
 import { TripTabsNav, TripTabType } from '@/components/trip-workspace/TripTabsNav';
-import { ItineraryTab, ItineraryItem } from '@/components/trip-workspace/ItineraryTab';
-import { TripBudgetPanel } from '@/components/trip-workspace/TripBudgetPanel';
-import { ChecklistTab, ChecklistItem } from '@/components/trip-workspace/ChecklistTab';
-import { TripMembersPanel, MemberItem } from '@/components/trip-workspace/TripMembersPanel';
-import { TripSettingsPanel, TripSettingsData } from '@/components/trip-workspace/TripSettingsPanel';
+import { ItineraryTab, ItineraryItem } from '@/components/trips/workspace/ItineraryTab';
+import { BudgetTab } from '@/components/trips/workspace/BudgetTab';
+import { ChecklistTab, ChecklistItem } from '@/components/trips/workspace/ChecklistTab';
+import { CollabTab, MemberItem } from '@/components/trips/workspace/CollabTab';
+import { SettingTab, SettingTabData } from '@/components/trips/workspace/SettingTab';
 import { MapWorkspacePanel, MapPinItem } from '@/components/trip-workspace/MapWorkspacePanel';
 import { LocationSuggestion } from '@/components/trip-workspace/AddLocationBar';
 import { CreateTripModal, NewTripFormData } from '@/components/modals/CreateTripModal';
@@ -113,7 +113,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
     );
   }
 
-  const tripInfo: TripSettingsData = {
+  const tripInfo: SettingTabData = {
     title: trip.name,
     location: trip.description || 'Chưa có mô tả chuyến đi',
     startDate: trip.startDate,
@@ -178,9 +178,9 @@ export default function TripWorkspacePage({ params }: PageProps) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 flex overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
       {/* CỘT TRÁI */}
-      <div className="w-full lg:w-[56%] xl:w-[57%] h-screen flex flex-col bg-white border-r border-slate-200">
+      <div className="w-full lg:w-[56%] xl:w-[57%] h-full flex flex-col bg-white border-r border-slate-200 overflow-hidden">
         <div className="px-6 sm:px-8 pt-6 pb-4 flex flex-col gap-4 bg-white z-10 shrink-0 border-b border-slate-100">
           <TripHeaderCard
             title={tripInfo.title}
@@ -192,7 +192,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           <TripTabsNav activeTab={activeTab} onChangeTab={setActiveTab} />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 flex flex-col gap-5 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-8 py-6 flex flex-col gap-5 custom-scrollbar">
           {activeTab === 'timeline' && (
             <ItineraryTab
               currentDate={formatDateVN(trip.startDate)}
@@ -223,7 +223,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'budget' && (
-            <TripBudgetPanel
+            <BudgetTab
               fundBalance={fundBalance}
               expenses={expenses}
               onUpdateBalance={(newVal) => setFundBalance(newVal)}
@@ -255,7 +255,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'members' && (
-            <TripMembersPanel
+            <CollabTab
               members={members}
               inviteUrl={`http://TravelSync.com/invite/${id}`}
               onUpdateMember={(memberId, newName, newEmail) =>
@@ -266,7 +266,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
           )}
 
           {activeTab === 'settings' && (
-            <TripSettingsPanel
+            <SettingTab
               initialTrip={tripInfo}
               onSaveSettings={() => {}}
               onToggleArchive={() => {}}
@@ -278,7 +278,7 @@ export default function TripWorkspacePage({ params }: PageProps) {
       </div>
 
       {/* CỘT PHẢI */}
-      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-screen relative">
+      <div className="hidden lg:block lg:w-[44%] xl:w-[43%] h-full relative overflow-hidden">
         <MapWorkspacePanel pins={mapPins} />
       </div>
 
