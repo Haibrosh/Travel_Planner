@@ -1,17 +1,23 @@
 package com.travel.planner.service;
 
+import com.travel.planner.dto.BudgetSummaryResponse;
+import com.travel.planner.dto.BudgetUpdateRequest;
+import com.travel.planner.dto.ExpenseCategorySummaryResponse;
 import com.travel.planner.dto.ExpenseRequest;
 import com.travel.planner.dto.ExpenseResponse;
 import com.travel.planner.dto.ExpenseSplitRequest;
 import com.travel.planner.model.Expense;
+import com.travel.planner.model.ExpenseCategory;
 import com.travel.planner.model.ExpenseSplit;
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.TripMember;
 import com.travel.planner.model.TripMemberId;
 import com.travel.planner.model.User;
+import com.travel.planner.repository.ExpenseCategorySummaryProjection;
 import com.travel.planner.repository.ExpenseRepository;
 import com.travel.planner.repository.ExpenseSplitRepository;
 import com.travel.planner.repository.TripMemberRepository;
+import com.travel.planner.repository.TripRepository;
 import com.travel.planner.security.TripSecurityService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +28,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -31,21 +40,24 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Chức năng: Xử lý nghiệp vụ quản lý chi phí (expenses) và chia tiền (expense_splits) của chuyến đi.
+ * Chức năng: Xử lý nghiệp vụ quản lý chi phí (expenses), chia tiền (expense_splits),
+ * cập nhật ngân sách và thống kê tổng hợp chi phí của chuyến đi.
  */
 @Service
 @RequiredArgsConstructor
 public class ExpenseService {
 
-    private static final String DEFAULT_CATEGORY = "OTHER";
     private static final String SPLIT_EQUAL = "EQUAL";
     private static final String SPLIT_CUSTOM = "CUSTOM";
     private static final String MEMBER_ACTIVE = "ACTIVE";
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("999999999999999");
+    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
+    private static final long TOTAL_PERCENTAGE_UNITS = 10_000L; // 100.00% theo bước 0.01%
 
     private final ExpenseRepository expenseRepository;
     private final ExpenseSplitRepository expenseSplitRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripRepository tripRepository;
     private final TripSecurityService tripSecurityService;
 
     // Lấy toàn bộ danh sách khoản chi của chuyến đi kèm chi tiết chia tiền
@@ -70,6 +82,32 @@ public class ExpenseService {
                 .toList();
     }
 
+    // Thống kê tổng hợp chi phí, số dư ngân sách và cơ cấu phần trăm theo hạng mục (bù phần dư tổng 100.00%)
+    @Transactional(readOnly = true)
+    public BudgetSummaryResponse getBudgetSummary(Long tripId, User currentUser) {
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
+        return buildBudgetSummary(trip);
+    }
+
+    // Cập nhật riêng ngân sách dự kiến cho chuyến đi và trả về thống kê mới nhất
+    @Transactional
+    public BudgetSummaryResponse updateTripBudget(
+            Long tripId,
+            BudgetUpdateRequest request,
+            User currentUser
+    ) {
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
+
+        BigDecimal normalizedBudget = TripService.normalizeBudget(request.getBudget());
+        if (normalizedBudget == null) {
+            throw new IllegalArgumentException("Ngân sách dự kiến (budget) không được để trống.");
+        }
+
+        trip.setBudget(normalizedBudget);
+        Trip savedTrip = tripRepository.saveAndFlush(trip);
+        return buildBudgetSummary(savedTrip);
+    }
+
     // Tạo khoản chi mới và tự động sinh bản ghi chia tiền theo EQUAL hoặc CUSTOM
     @Transactional
     public ExpenseResponse createExpense(Long tripId, ExpenseRequest request, User currentUser) {
@@ -77,7 +115,9 @@ public class ExpenseService {
 
         BigDecimal amount = normalizePositiveIntegerAmount(request.getAmount(), "Số tiền khoản chi (amount)");
         String splitMethod = resolveSplitMethod(request.getSplitMethod());
-        String category = resolveCategory(request.getCategory());
+        ExpenseCategory category = request.getCategory() != null
+                ? request.getCategory()
+                : ExpenseCategory.OTHER;
         LocalDate expenseDate = request.getExpenseDate() != null ? request.getExpenseDate() : LocalDate.now();
 
         Long payerId = request.getPaidByUserId() != null
@@ -119,9 +159,9 @@ public class ExpenseService {
 
         BigDecimal amount = normalizePositiveIntegerAmount(request.getAmount(), "Số tiền khoản chi (amount)");
         String splitMethod = resolveSplitMethod(request.getSplitMethod());
-        String category = request.getCategory() != null
-                ? resolveCategory(request.getCategory())
-                : expense.getCategory();
+        ExpenseCategory category = request.getCategory() != null
+                ? request.getCategory()
+                : (expense.getCategory() != null ? expense.getCategory() : ExpenseCategory.OTHER);
         LocalDate expenseDate = request.getExpenseDate() != null
                 ? request.getExpenseDate()
                 : expense.getExpenseDate();
@@ -164,6 +204,118 @@ public class ExpenseService {
 
         expenseSplitRepository.deleteAllByExpenseId(expenseId);
         expenseRepository.delete(expense);
+    }
+
+    private BudgetSummaryResponse buildBudgetSummary(Trip trip) {
+        List<ExpenseCategorySummaryProjection> rawRows =
+                expenseRepository.findCategorySummariesByTripId(trip.getTripId());
+
+        // Gộp các bản ghi cùng hạng mục (phòng trường hợp dữ liệu cũ có alias khác chuỗi)
+        Map<ExpenseCategory, CategoryAccumulator> grouped = new EnumMap<>(ExpenseCategory.class);
+        BigDecimal totalSpent = BigDecimal.ZERO;
+        long totalExpenseCount = 0L;
+
+        for (ExpenseCategorySummaryProjection row : rawRows) {
+            BigDecimal rowAmount = row.getTotalAmount() != null ? row.getTotalAmount() : BigDecimal.ZERO;
+            long rowCount = row.getExpenseCount() != null ? row.getExpenseCount() : 0L;
+            if (rowAmount.compareTo(BigDecimal.ZERO) <= 0 || rowCount <= 0) {
+                continue;
+            }
+            ExpenseCategory category = row.getCategory() != null ? row.getCategory() : ExpenseCategory.OTHER;
+            CategoryAccumulator acc = grouped.computeIfAbsent(category, CategoryAccumulator::new);
+            acc.add(rowAmount, rowCount);
+            totalSpent = totalSpent.add(rowAmount);
+            totalExpenseCount += rowCount;
+        }
+
+        List<CategoryAccumulator> sortedBuckets = new ArrayList<>(grouped.values());
+        sortedBuckets.sort(Comparator
+                .comparing(CategoryAccumulator::getTotalAmount, Comparator.reverseOrder())
+                .thenComparing(acc -> acc.getCategory().name()));
+
+        List<ExpenseCategorySummaryResponse> categoryBreakdown =
+                allocatePercentagesWithLargestRemainder(sortedBuckets, totalSpent);
+
+        BigDecimal totalBudget = trip.getBudget();
+        BigDecimal remainingBudget = totalBudget != null ? totalBudget.subtract(totalSpent) : null;
+        boolean isOverBudget = totalBudget != null && totalSpent.compareTo(totalBudget) > 0;
+        BigDecimal budgetUsedPercentage = calculateBudgetUsedPercentage(totalBudget, totalSpent);
+
+        return BudgetSummaryResponse.builder()
+                .tripId(trip.getTripId())
+                .totalBudget(totalBudget)
+                .totalSpent(totalSpent)
+                .remainingBudget(remainingBudget)
+                .budgetUsedPercentage(budgetUsedPercentage)
+                .isOverBudget(isOverBudget)
+                .expenseCount(totalExpenseCount)
+                .categoryBreakdown(categoryBreakdown)
+                .build();
+    }
+
+    private BigDecimal calculateBudgetUsedPercentage(BigDecimal totalBudget, BigDecimal totalSpent) {
+        if (totalBudget == null) {
+            return null;
+        }
+        if (totalBudget.compareTo(BigDecimal.ZERO) == 0) {
+            return totalSpent.compareTo(BigDecimal.ZERO) == 0
+                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                    : null;
+        }
+        return totalSpent.multiply(ONE_HUNDRED).divide(totalBudget, 2, RoundingMode.HALF_UP);
+    }
+
+    // Phân bổ phần trăm bằng thuật toán Largest Remainder (Hamilton) để tổng các hạng mục luôn bằng 100.00%
+    private List<ExpenseCategorySummaryResponse> allocatePercentagesWithLargestRemainder(
+            List<CategoryAccumulator> sortedBuckets,
+            BigDecimal totalSpent
+    ) {
+        if (sortedBuckets.isEmpty() || totalSpent.compareTo(BigDecimal.ZERO) <= 0) {
+            return Collections.emptyList();
+        }
+
+        int n = sortedBuckets.size();
+        long[] units = new long[n];
+        BigDecimal[] remainders = new BigDecimal[n];
+        long assignedUnits = 0L;
+
+        for (int i = 0; i < n; i++) {
+            BigDecimal scaled = sortedBuckets.get(i).getTotalAmount()
+                    .multiply(BigDecimal.valueOf(TOTAL_PERCENTAGE_UNITS));
+            BigDecimal[] divAndRem = scaled.divideAndRemainder(totalSpent);
+            units[i] = divAndRem[0].longValueExact();
+            remainders[i] = divAndRem[1];
+            assignedUnits += units[i];
+        }
+
+        long missingUnits = TOTAL_PERCENTAGE_UNITS - assignedUnits;
+        if (missingUnits > 0) {
+            Integer[] order = new Integer[n];
+            for (int i = 0; i < n; i++) {
+                order[i] = i;
+            }
+            Arrays.sort(order, Comparator
+                    .<Integer, BigDecimal>comparing(idx -> remainders[idx], Comparator.reverseOrder())
+                    .thenComparing(idx -> sortedBuckets.get(idx).getTotalAmount(), Comparator.reverseOrder())
+                    .thenComparingInt(idx -> idx));
+
+            for (int k = 0; k < missingUnits && k < n; k++) {
+                units[order[k]] += 1L;
+            }
+        }
+
+        List<ExpenseCategorySummaryResponse> result = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            CategoryAccumulator acc = sortedBuckets.get(i);
+            result.add(ExpenseCategorySummaryResponse.builder()
+                    .category(acc.getCategory())
+                    .categoryLabel(acc.getCategory().getLabel())
+                    .totalAmount(acc.getTotalAmount())
+                    .expenseCount(acc.getExpenseCount())
+                    .percentage(BigDecimal.valueOf(units[i], 2))
+                    .build());
+        }
+        return result;
     }
 
     private List<ExpenseSplit> buildSplits(
@@ -354,10 +506,30 @@ public class ExpenseService {
         return normalized;
     }
 
-    private String resolveCategory(String rawCategory) {
-        if (rawCategory == null || rawCategory.trim().isEmpty()) {
-            return DEFAULT_CATEGORY;
+    private static final class CategoryAccumulator {
+        private final ExpenseCategory category;
+        private BigDecimal totalAmount = BigDecimal.ZERO;
+        private long expenseCount = 0L;
+
+        private CategoryAccumulator(ExpenseCategory category) {
+            this.category = category;
         }
-        return rawCategory.trim();
+
+        private void add(BigDecimal amount, long count) {
+            this.totalAmount = this.totalAmount.add(amount);
+            this.expenseCount += count;
+        }
+
+        private ExpenseCategory getCategory() {
+            return category;
+        }
+
+        private BigDecimal getTotalAmount() {
+            return totalAmount;
+        }
+
+        private long getExpenseCount() {
+            return expenseCount;
+        }
     }
 }

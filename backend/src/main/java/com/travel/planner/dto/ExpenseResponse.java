@@ -1,6 +1,7 @@
 package com.travel.planner.dto;
 
 import com.travel.planner.model.Expense;
+import com.travel.planner.model.ExpenseCategory;
 import com.travel.planner.model.ExpenseSplit;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,7 +28,8 @@ public class ExpenseResponse {
     private Long paidByUserId;
     private String paidByUsername;
     private String title;
-    private String category;
+    private ExpenseCategory category;
+    private String categoryLabel;
     private BigDecimal amount;
     private String splitMethod;
     private LocalDate expenseDate;
@@ -46,13 +48,18 @@ public class ExpenseResponse {
                         .map(ExpenseSplitResponse::fromEntity)
                         .toList();
 
+        ExpenseCategory resolvedCategory = expense.getCategory() != null
+                ? expense.getCategory()
+                : ExpenseCategory.OTHER;
+
         return ExpenseResponse.builder()
                 .expenseId(expense.getExpenseId())
                 .tripId(expense.getTrip() != null ? expense.getTrip().getTripId() : null)
                 .paidByUserId(expense.getPaidBy() != null ? expense.getPaidBy().getUserId() : null)
                 .paidByUsername(expense.getPaidBy() != null ? expense.getPaidBy().getUsername() : null)
                 .title(expense.getTitle())
-                .category(expense.getCategory())
+                .category(resolvedCategory)
+                .categoryLabel(resolvedCategory.getLabel())
                 .amount(expense.getAmount())
                 .splitMethod(expense.getSplitMethod())
                 .expenseDate(expense.getExpenseDate())

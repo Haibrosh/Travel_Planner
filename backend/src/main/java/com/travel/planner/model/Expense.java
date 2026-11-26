@@ -30,9 +30,10 @@ public class Expense {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
+    @Convert(converter = ExpenseCategoryConverter.class)
     @Column(name = "category", nullable = false, length = 50)
     @Builder.Default
-    private String category = "OTHER";
+    private ExpenseCategory category = ExpenseCategory.OTHER;
 
     @Column(name = "amount", nullable = false, precision = 15, scale = 0)
     private BigDecimal amount;

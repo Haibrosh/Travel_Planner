@@ -34,4 +34,16 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
             @Param("expenseId") Long expenseId,
             @Param("tripId") Long tripId
     );
+
+    // Thống kê tổng số tiền và số lượng khoản chi theo từng hạng mục của chuyến đi
+    @Query("""
+            SELECT e.category AS category,
+                   COALESCE(SUM(e.amount), 0) AS totalAmount,
+                   COUNT(e) AS expenseCount
+            FROM Expense e
+            WHERE e.trip.tripId = :tripId
+            GROUP BY e.category
+            ORDER BY SUM(e.amount) DESC, e.category ASC
+            """)
+    List<ExpenseCategorySummaryProjection> findCategorySummariesByTripId(@Param("tripId") Long tripId);
 }
