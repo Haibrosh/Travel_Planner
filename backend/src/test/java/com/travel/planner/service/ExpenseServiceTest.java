@@ -19,6 +19,7 @@ import com.travel.planner.repository.ExpenseSplitRepository;
 import com.travel.planner.repository.TripMemberRepository;
 import com.travel.planner.repository.TripRepository;
 import com.travel.planner.security.TripSecurityService;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,6 +59,9 @@ class ExpenseServiceTest {
 
     @Mock
     private TripSecurityService tripSecurityService;
+
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private ExpenseService expenseService;
@@ -429,6 +434,97 @@ class ExpenseServiceTest {
         assertThat(converter.convertToDatabaseColumn(null)).isEqualTo("OTHER");
         assertThat(converter.convertToEntityAttribute("Di chuyển")).isEqualTo(ExpenseCategory.TRANSPORT);
         assertThat(converter.convertToEntityAttribute("LEGACY_CUSTOM")).isEqualTo(ExpenseCategory.OTHER);
+    }
+
+    @Test
+    @DisplayName("16. Từ chối phần tử null trong splits (không gây NullPointerException) và số tiền khoa học quá lớn")
+    void createExpense_nullSplitItemAndExtremeAmount_throwsIllegalArgument() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L)).thenReturn(Optional.of(member1));
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> {
+            Expense e = inv.getArgument(0);
+            e.setExpenseId(105L);
+            return e;
+        });
+
+        ExpenseRequest nullSplitReq = ExpenseRequest.builder()
+                .title("Chi phí lỗi split")
+                .amount(new BigDecimal("100000"))
+                .splitMethod("CUSTOM")
+                .splits(Arrays.asList((ExpenseSplitRequest) null))
+                .build();
+
+        assertThatThrownBy(() -> expenseService.createExpense(10L, nullSplitReq, user1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được để trống");
+
+        ExpenseRequest hugeAmountReq = ExpenseRequest.builder()
+                .title("Số tiền quá lớn")
+                .amount(new BigDecimal("1e1000000"))
+                .build();
+
+        assertThatThrownBy(() -> expenseService.createExpense(10L, hugeAmountReq, user1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tối đa 15 chữ số");
+    }
+
+    @Test
+    @DisplayName("17. Cập nhật khoản chi CUSTOM khi bỏ trống splitMethod -> giữ nguyên CUSTOM thay vì ép về EQUAL")
+    void updateExpense_nullSplitMethodOnCustom_preservesCustomMethod() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        Expense existing = Expense.builder()
+                .expenseId(100L).trip(trip).paidBy(user1).title("Vé").category(ExpenseCategory.TICKET)
+                .amount(new BigDecimal("500000")).splitMethod("CUSTOM").expenseDate(LocalDate.of(2026, 11, 15)).build();
+
+        when(expenseRepository.findByExpenseIdAndTripIdWithPayer(100L, 10L)).thenReturn(Optional.of(existing));
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L)).thenReturn(Optional.of(member1));
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 2L)).thenReturn(Optional.of(member2));
+        when(expenseSplitRepository.findAllByExpenseIdWithUser(100L)).thenReturn(List.of());
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(expenseSplitRepository.saveAllAndFlush(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExpenseRequest request = ExpenseRequest.builder()
+                .title("Vé cập nhật")
+                .amount(new BigDecimal("500000"))
+                .splits(List.of(
+                        ExpenseSplitRequest.builder().userId(1L).splitAmount(new BigDecimal("100000")).build(),
+                        ExpenseSplitRequest.builder().userId(2L).splitAmount(new BigDecimal("400000")).build()
+                ))
+                .build();
+
+        ExpenseResponse updated = expenseService.updateExpense(10L, 100L, request, user1);
+
+        assertThat(updated.getSplitMethod()).isEqualTo("CUSTOM");
+        assertThat(updated.getSplits().get(0).getSplitAmount()).isEqualByComparingTo("100000");
+        assertThat(updated.getSplits().get(1).getSplitAmount()).isEqualByComparingTo("400000");
+    }
+
+    @Test
+    @DisplayName("18. Tự đồng bộ OWNER cho trip cũ bằng insertOwnerIfMissingIgnoreConflict (an toàn khi chạy song song)")
+    void createExpense_legacyTripMissingOwnerMember_syncsSafely() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(member1));
+        when(tripMemberRepository.findByTripIdAndStatusWithUser(10L, "ACTIVE"))
+                .thenReturn(List.of(member1));
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> {
+            Expense e = inv.getArgument(0);
+            e.setExpenseId(106L);
+            return e;
+        });
+        when(expenseSplitRepository.saveAllAndFlush(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExpenseRequest request = ExpenseRequest.builder()
+                .title("Chi phí trip cũ")
+                .amount(new BigDecimal("200000"))
+                .build();
+
+        ExpenseResponse created = expenseService.createExpense(10L, request, user1);
+
+        verify(tripMemberRepository).insertOwnerIfMissingIgnoreConflict(10L, 1L);
+        assertThat(created.getPaidByUserId()).isEqualTo(1L);
+        assertThat(created.getSplits()).hasSize(1);
     }
 
     private ExpenseCategorySummaryProjection projection(

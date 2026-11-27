@@ -38,7 +38,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     // Thống kê tổng số tiền và số lượng khoản chi theo từng hạng mục của chuyến đi
     @Query("""
             SELECT e.category AS category,
-                   COALESCE(SUM(e.amount), 0) AS totalAmount,
+                   SUM(e.amount) AS totalAmount,
                    COUNT(e) AS expenseCount
             FROM Expense e
             WHERE e.trip.tripId = :tripId

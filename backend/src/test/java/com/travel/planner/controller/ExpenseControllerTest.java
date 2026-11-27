@@ -31,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -161,7 +162,16 @@ class ExpenseControllerTest {
                         .content("""
                                 {"title":"Vé xe","category":"KHONG_HOP_LE","amount":100000}
                                 """))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("FOOD, TRANSPORT, ACCOMMODATION, TICKET, SHOPPING, OTHER")));
+
+        mockMvc.perform(post("/api/v1/trips/10/budgets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Vé xe","amount":100000,"splits":[null]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Validation Error"));
     }
 
     @Test

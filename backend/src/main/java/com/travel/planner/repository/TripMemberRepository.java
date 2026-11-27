@@ -3,6 +3,7 @@ package com.travel.planner.repository;
 import com.travel.planner.model.TripMember;
 import com.travel.planner.model.TripMemberId;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,18 @@ import java.util.Optional;
  */
 @Repository
 public interface TripMemberRepository extends JpaRepository<TripMember, TripMemberId> {
+
+    // Chèn bản ghi OWNER một cách an toàn khi chạy song song cho trip cũ (trước V6)
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            INSERT INTO app.trip_members (trip_id, user_id, role, status)
+            VALUES (:tripId, :userId, 'OWNER', 'ACTIVE')
+            ON CONFLICT (trip_id, user_id) DO NOTHING
+            """, nativeQuery = true)
+    void insertOwnerIfMissingIgnoreConflict(
+            @Param("tripId") Long tripId,
+            @Param("userId") Long userId
+    );
 
     // Danh sách thành viên đang hoạt động trong chuyến đi
     List<TripMember> findByTrip_TripIdAndStatus(Long tripId, String status);

@@ -43,6 +43,5 @@ public class ExpenseRequest {
 
     private String notes;
 
-    @Valid
-    private List<ExpenseSplitRequest> splits;
+    private List<@NotNull(message = "Phần tử trong danh sách chia tiền (splits) không được để trống") @Valid ExpenseSplitRequest> splits;
 }

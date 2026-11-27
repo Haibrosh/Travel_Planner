@@ -11,7 +11,6 @@ import com.travel.planner.model.ExpenseCategory;
 import com.travel.planner.model.ExpenseSplit;
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.TripMember;
-import com.travel.planner.model.TripMemberId;
 import com.travel.planner.model.User;
 import com.travel.planner.repository.ExpenseCategorySummaryProjection;
 import com.travel.planner.repository.ExpenseRepository;
@@ -19,6 +18,7 @@ import com.travel.planner.repository.ExpenseSplitRepository;
 import com.travel.planner.repository.TripMemberRepository;
 import com.travel.planner.repository.TripRepository;
 import com.travel.planner.security.TripSecurityService;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -59,6 +59,7 @@ public class ExpenseService {
     private final TripMemberRepository tripMemberRepository;
     private final TripRepository tripRepository;
     private final TripSecurityService tripSecurityService;
+    private final EntityManager entityManager;
 
     // Lấy toàn bộ danh sách khoản chi của chuyến đi kèm chi tiết chia tiền
     @Transactional(readOnly = true)
@@ -137,6 +138,7 @@ public class ExpenseService {
                 .build();
 
         Expense savedExpense = expenseRepository.saveAndFlush(expense);
+        entityManager.refresh(savedExpense);
         List<ExpenseSplit> splits = buildSplits(
                 trip, savedExpense, amount, splitMethod, request.getSplits(), Collections.emptySet());
         List<ExpenseSplit> savedSplits = expenseSplitRepository.saveAllAndFlush(splits);
@@ -158,7 +160,9 @@ public class ExpenseService {
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy khoản chi với ID: " + expenseId));
 
         BigDecimal amount = normalizePositiveIntegerAmount(request.getAmount(), "Số tiền khoản chi (amount)");
-        String splitMethod = resolveSplitMethod(request.getSplitMethod());
+        String splitMethod = request.getSplitMethod() != null
+                ? resolveSplitMethod(request.getSplitMethod())
+                : (expense.getSplitMethod() != null ? expense.getSplitMethod() : SPLIT_EQUAL);
         ExpenseCategory category = request.getCategory() != null
                 ? request.getCategory()
                 : (expense.getCategory() != null ? expense.getCategory() : ExpenseCategory.OTHER);
@@ -185,6 +189,7 @@ public class ExpenseService {
         expense.setNotes(request.getNotes());
 
         Expense savedExpense = expenseRepository.saveAndFlush(expense);
+        entityManager.refresh(savedExpense);
         expenseSplitRepository.deleteAllByExpenseId(expenseId);
 
         List<ExpenseSplit> newSplits = buildSplits(
@@ -346,8 +351,8 @@ public class ExpenseService {
             participants = new ArrayList<>(splitRequests.size());
             Set<Long> seenUserIds = new HashSet<>();
             for (ExpenseSplitRequest item : splitRequests) {
-                if (item.getUserId() == null) {
-                    throw new IllegalArgumentException("ID thành viên (userId) trong danh sách chia tiền không được để trống.");
+                if (item == null || item.getUserId() == null) {
+                    throw new IllegalArgumentException("Phần tử hoặc ID thành viên (userId) trong danh sách chia tiền không được để trống.");
                 }
                 if (!seenUserIds.add(item.getUserId())) {
                     throw new IllegalArgumentException("Danh sách chia tiền không được chứa thành viên trùng lặp.");
@@ -396,8 +401,8 @@ public class ExpenseService {
         BigDecimal totalSplit = BigDecimal.ZERO;
 
         for (ExpenseSplitRequest item : splitRequests) {
-            if (item.getUserId() == null) {
-                throw new IllegalArgumentException("ID thành viên (userId) trong danh sách chia tiền không được để trống.");
+            if (item == null || item.getUserId() == null) {
+                throw new IllegalArgumentException("Phần tử hoặc ID thành viên (userId) trong danh sách chia tiền không được để trống.");
             }
             if (!seenUserIds.add(item.getUserId())) {
                 throw new IllegalArgumentException("Danh sách chia tiền không được chứa thành viên trùng lặp.");
@@ -463,36 +468,34 @@ public class ExpenseService {
         return member.getUser();
     }
 
-    // Tự đồng bộ owner vào app.trip_members cho các chuyến đi tạo trước V6 (nếu thiếu)
+    // Tự đồng bộ owner vào app.trip_members cho các chuyến đi tạo trước V6 một cách an toàn khi chạy song song
     private TripMember ensureOwnerMemberIfMissing(Trip trip) {
         Long tripId = trip.getTripId();
         Long ownerId = trip.getOwner().getUserId();
-        TripMember ownerMember = TripMember.builder()
-                .id(new TripMemberId(tripId, ownerId))
-                .trip(trip)
-                .user(trip.getOwner())
-                .role("OWNER")
-                .status(MEMBER_ACTIVE)
-                .build();
-        return tripMemberRepository.saveAndFlush(ownerMember);
+        tripMemberRepository.insertOwnerIfMissingIgnoreConflict(tripId, ownerId);
+        return tripMemberRepository.findByTripIdAndUserIdWithUser(tripId, ownerId)
+                .orElseThrow(() -> new EntityNotFoundException("Không thể đồng bộ chủ chuyến đi vào danh sách thành viên."));
     }
 
     private BigDecimal normalizePositiveIntegerAmount(BigDecimal rawAmount, String fieldLabel) {
         if (rawAmount == null) {
             throw new IllegalArgumentException(fieldLabel + " không được để trống.");
         }
+        // Kiểm tra cận trên/dưới trước khi stripTrailingZeros/setScale để tránh tràn bộ nhớ với số ký hiệu khoa học lớn
+        if (rawAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(fieldLabel + " phải lớn hơn 0.");
+        }
+        if (rawAmount.compareTo(MAX_AMOUNT) > 0) {
+            throw new IllegalArgumentException(fieldLabel + " vượt quá giới hạn cho phép (tối đa 15 chữ số).");
+        }
+        if (rawAmount.compareTo(BigDecimal.ONE) < 0) {
+            throw new IllegalArgumentException(fieldLabel + " phải là số nguyên dương (không có phần thập phân).");
+        }
         BigDecimal normalized = rawAmount.stripTrailingZeros();
         if (normalized.scale() > 0) {
             throw new IllegalArgumentException(fieldLabel + " phải là số nguyên dương (không có phần thập phân).");
         }
-        BigDecimal integerAmount = normalized.setScale(0, RoundingMode.UNNECESSARY);
-        if (integerAmount.compareTo(BigDecimal.ONE) < 0) {
-            throw new IllegalArgumentException(fieldLabel + " phải lớn hơn 0.");
-        }
-        if (integerAmount.compareTo(MAX_AMOUNT) > 0) {
-            throw new IllegalArgumentException(fieldLabel + " vượt quá giới hạn cho phép (tối đa 15 chữ số).");
-        }
-        return integerAmount;
+        return normalized.setScale(0, RoundingMode.UNNECESSARY);
     }
 
     private String resolveSplitMethod(String rawSplitMethod) {
