@@ -2,11 +2,12 @@ package com.travel.planner.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3, V7) - chuyến đi do một user tạo (owner).
+ * Chức năng: Entity ánh xạ bảng 'app.trips' (migration V3, V7, V12) - chuyến đi do một user tạo (owner).
  * Lưu ý: dùng @Getter/@Setter thay vì @Data để tránh toString/hashCode kéo theo quan hệ LAZY
  * (gây LazyInitializationException hoặc vòng lặp vô hạn).
  */
@@ -51,6 +52,10 @@ public class Trip {
     @Column(name = "status", nullable = false, length = 50)
     @Builder.Default
     private String status = "PLANNING";
+
+    // Ngân sách dự kiến của chuyến đi (VND, NULL nếu chưa thiết lập)
+    @Column(name = "budget", precision = 15, scale = 0)
+    private BigDecimal budget;
 
     // Do DB tự sinh (DEFAULT NOW() + trigger) nên không cho Hibernate ghi
     @Column(name = "created_at", insertable = false, updatable = false)

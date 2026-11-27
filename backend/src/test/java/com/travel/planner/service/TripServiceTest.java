@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -403,5 +404,87 @@ class TripServiceTest {
                 .isInstanceOf(EntityNotFoundException.class);
 
         verify(tripRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("20. Tạo chuyến đi kèm ngân sách dự kiến và cập nhật vẫn giữ ngân sách nếu request bỏ trống budget")
+    void createAndUpdateTrip_budgetHandling_success() {
+        TripRequest createReq = new TripRequest();
+        createReq.setProvinceCode("DN");
+        createReq.setName("Đà Nẵng có ngân sách");
+        createReq.setStartDate(LocalDate.of(2026, 11, 10));
+        createReq.setEndDate(LocalDate.of(2026, 11, 12));
+        createReq.setBudget(new BigDecimal("5000000"));
+
+        when(destinationRepository.findById("DN")).thenReturn(Optional.of(daNang));
+        when(tripRepository.saveAndFlush(any(Trip.class))).thenAnswer(inv -> {
+            Trip t = inv.getArgument(0);
+            t.setTripId(20L);
+            return t;
+        });
+
+        TripResponse created = tripService.createTrip(createReq, owner);
+        assertThat(created.getBudget()).isEqualByComparingTo("5000000");
+
+        trip.setBudget(new BigDecimal("5000000"));
+        TripRequest updateReq = new TripRequest();
+        updateReq.setProvinceCode("DN");
+        updateReq.setName("Đổi tên không gửi budget");
+        updateReq.setStartDate(LocalDate.of(2026, 11, 10));
+        updateReq.setEndDate(LocalDate.of(2026, 11, 14));
+
+        when(tripSecurityService.getTripIfOwner(10L, owner)).thenReturn(trip);
+        when(tripRepository.saveAndFlush(trip)).thenReturn(trip);
+        when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
+
+        TripResponse updated = tripService.updateTrip(10L, updateReq, owner);
+        assertThat(updated.getBudget()).isEqualByComparingTo("5000000");
+    }
+
+    @Test
+    @DisplayName("21. Tạo chuyến đi với ngân sách âm -> ném IllegalArgumentException")
+    void createTrip_negativeBudget_throwsIllegalArgumentException() {
+        TripRequest request = new TripRequest();
+        request.setProvinceCode("DN");
+        request.setName("Chuyến đi lỗi ngân sách");
+        request.setStartDate(LocalDate.of(2026, 11, 10));
+        request.setEndDate(LocalDate.of(2026, 11, 12));
+        request.setBudget(new BigDecimal("-10000"));
+
+        when(destinationRepository.findById("DN")).thenReturn(Optional.of(daNang));
+
+        assertThatThrownBy(() -> tripService.createTrip(request, owner))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được âm");
+
+        verify(tripRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("22. Tạo chuyến đi với ngân sách ký hiệu khoa học quá lớn hoặc thập phân < 1 -> ném IllegalArgumentException")
+    void createTrip_extremeScientificBudget_throwsIllegalArgumentException() {
+        TripRequest hugeReq = new TripRequest();
+        hugeReq.setProvinceCode("DN");
+        hugeReq.setName("Ngân sách quá lớn");
+        hugeReq.setStartDate(LocalDate.of(2026, 11, 10));
+        hugeReq.setEndDate(LocalDate.of(2026, 11, 12));
+        hugeReq.setBudget(new BigDecimal("1e1000000"));
+
+        when(destinationRepository.findById("DN")).thenReturn(Optional.of(daNang));
+
+        assertThatThrownBy(() -> tripService.createTrip(hugeReq, owner))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tối đa 15 chữ số");
+
+        TripRequest tinyReq = new TripRequest();
+        tinyReq.setProvinceCode("DN");
+        tinyReq.setName("Ngân sách thập phân");
+        tinyReq.setStartDate(LocalDate.of(2026, 11, 10));
+        tinyReq.setEndDate(LocalDate.of(2026, 11, 12));
+        tinyReq.setBudget(new BigDecimal("1e-1000000"));
+
+        assertThatThrownBy(() -> tripService.createTrip(tinyReq, owner))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("số nguyên không âm");
     }
 }

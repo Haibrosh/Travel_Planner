@@ -1,5 +1,6 @@
 package com.travel.planner.dto;
 
+import com.travel.planner.model.ExpenseCategory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -27,8 +28,7 @@ public class ExpenseRequest {
     @Size(max = 255, message = "Tên khoản chi không được vượt quá 255 ký tự")
     private String title;
 
-    @Size(max = 50, message = "Danh mục chi phí (category) không được vượt quá 50 ký tự")
-    private String category;
+    private ExpenseCategory category;
 
     @NotNull(message = "Số tiền (amount) không được để trống")
     @DecimalMin(value = "1", message = "Số tiền (amount) phải lớn hơn 0")
@@ -43,6 +43,5 @@ public class ExpenseRequest {
 
     private String notes;
 
-    @Valid
-    private List<ExpenseSplitRequest> splits;
+    private List<@NotNull(message = "Phần tử trong danh sách chia tiền (splits) không được để trống") @Valid ExpenseSplitRequest> splits;
 }

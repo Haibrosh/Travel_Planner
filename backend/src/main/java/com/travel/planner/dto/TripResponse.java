@@ -4,6 +4,7 @@ import com.travel.planner.model.Trip;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -25,6 +26,7 @@ public class TripResponse {
     private LocalDate startDate;
     private LocalDate endDate;
     private String status;
+    private BigDecimal budget;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -46,6 +48,7 @@ public class TripResponse {
                 .startDate(trip.getStartDate())
                 .endDate(trip.getEndDate())
                 .status(trip.getStatus())
+                .budget(trip.getBudget())
                 .createdAt(trip.getCreatedAt())
                 .updatedAt(trip.getUpdatedAt())
                 .build();

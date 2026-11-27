@@ -1,18 +1,25 @@
 package com.travel.planner.service;
 
+import com.travel.planner.dto.BudgetSummaryResponse;
+import com.travel.planner.dto.BudgetUpdateRequest;
 import com.travel.planner.dto.ExpenseRequest;
 import com.travel.planner.dto.ExpenseResponse;
 import com.travel.planner.dto.ExpenseSplitRequest;
 import com.travel.planner.model.Expense;
+import com.travel.planner.model.ExpenseCategory;
+import com.travel.planner.model.ExpenseCategoryConverter;
 import com.travel.planner.model.ExpenseSplit;
 import com.travel.planner.model.Trip;
 import com.travel.planner.model.TripMember;
 import com.travel.planner.model.TripMemberId;
 import com.travel.planner.model.User;
+import com.travel.planner.repository.ExpenseCategorySummaryProjection;
 import com.travel.planner.repository.ExpenseRepository;
 import com.travel.planner.repository.ExpenseSplitRepository;
 import com.travel.planner.repository.TripMemberRepository;
+import com.travel.planner.repository.TripRepository;
 import com.travel.planner.security.TripSecurityService;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,9 +28,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,7 +55,13 @@ class ExpenseServiceTest {
     private TripMemberRepository tripMemberRepository;
 
     @Mock
+    private TripRepository tripRepository;
+
+    @Mock
     private TripSecurityService tripSecurityService;
+
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private ExpenseService expenseService;
@@ -69,6 +84,7 @@ class ExpenseServiceTest {
                 .tripId(10L)
                 .owner(user1)
                 .name("Chuyến đi Đà Nẵng")
+                .budget(new BigDecimal("5000000"))
                 .build();
 
         member1 = TripMember.builder().id(new TripMemberId(10L, 1L)).trip(trip).user(user1).role("OWNER").status("ACTIVE").build();
@@ -81,7 +97,7 @@ class ExpenseServiceTest {
     void getExpenses_success() {
         when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
         Expense expense = Expense.builder()
-                .expenseId(100L).trip(trip).paidBy(user1).title("Ăn tối").category("FOOD")
+                .expenseId(100L).trip(trip).paidBy(user1).title("Ăn tối").category(ExpenseCategory.FOOD)
                 .amount(new BigDecimal("300000")).splitMethod("EQUAL").expenseDate(LocalDate.of(2026, 11, 15)).build();
         ExpenseSplit s1 = ExpenseSplit.builder().splitId(1L).expense(expense).trip(trip).user(user1).splitAmount(new BigDecimal("150000")).build();
         ExpenseSplit s2 = ExpenseSplit.builder().splitId(2L).expense(expense).trip(trip).user(user2).splitAmount(new BigDecimal("150000")).build();
@@ -93,6 +109,8 @@ class ExpenseServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getPaidByUsername()).isEqualTo("owner");
+        assertThat(result.get(0).getCategory()).isEqualTo(ExpenseCategory.FOOD);
+        assertThat(result.get(0).getCategoryLabel()).isEqualTo("Ăn uống");
         assertThat(result.get(0).getSplits()).hasSize(2);
     }
 
@@ -119,7 +137,8 @@ class ExpenseServiceTest {
         ExpenseResponse created = expenseService.createExpense(10L, request, user1);
 
         assertThat(created.getExpenseId()).isEqualTo(101L);
-        assertThat(created.getCategory()).isEqualTo("OTHER");
+        assertThat(created.getCategory()).isEqualTo(ExpenseCategory.OTHER);
+        assertThat(created.getCategoryLabel()).isEqualTo("Khác");
         assertThat(created.getSplitMethod()).isEqualTo("EQUAL");
         assertThat(created.getSplits()).hasSize(3);
         assertThat(created.getSplits().get(0).getSplitAmount()).isEqualByComparingTo("33334");
@@ -143,7 +162,7 @@ class ExpenseServiceTest {
 
         ExpenseRequest request = ExpenseRequest.builder()
                 .title("Vé tham quan")
-                .category("TICKET")
+                .category(ExpenseCategory.TICKET)
                 .amount(new BigDecimal("500000"))
                 .paidByUserId(2L)
                 .splitMethod("CUSTOM")
@@ -156,6 +175,7 @@ class ExpenseServiceTest {
         ExpenseResponse created = expenseService.createExpense(10L, request, user1);
 
         assertThat(created.getPaidByUserId()).isEqualTo(2L);
+        assertThat(created.getCategory()).isEqualTo(ExpenseCategory.TICKET);
         assertThat(created.getSplitMethod()).isEqualTo("CUSTOM");
         assertThat(created.getSplits()).hasSize(2);
     }
@@ -226,7 +246,7 @@ class ExpenseServiceTest {
     void updateExpense_success() {
         when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
         Expense existing = Expense.builder()
-                .expenseId(100L).trip(trip).paidBy(user1).title("Cũ").category("OTHER")
+                .expenseId(100L).trip(trip).paidBy(user1).title("Cũ").category(ExpenseCategory.OTHER)
                 .amount(new BigDecimal("100000")).splitMethod("EQUAL").expenseDate(LocalDate.of(2026, 11, 15)).build();
         ExpenseSplit oldSplit = ExpenseSplit.builder().splitId(1L).expense(existing).trip(trip).user(user1).splitAmount(new BigDecimal("100000")).build();
 
@@ -239,7 +259,7 @@ class ExpenseServiceTest {
 
         ExpenseRequest request = ExpenseRequest.builder()
                 .title("Mới")
-                .category("FOOD")
+                .category(ExpenseCategory.FOOD)
                 .amount(new BigDecimal("400000"))
                 .splitMethod("EQUAL")
                 .splits(List.of(
@@ -252,6 +272,7 @@ class ExpenseServiceTest {
 
         verify(expenseSplitRepository).deleteAllByExpenseId(100L);
         assertThat(updated.getTitle()).isEqualTo("Mới");
+        assertThat(updated.getCategory()).isEqualTo(ExpenseCategory.FOOD);
         assertThat(updated.getAmount()).isEqualByComparingTo("400000");
         assertThat(updated.getSplits()).hasSize(2);
         assertThat(updated.getSplits().get(0).getSplitAmount()).isEqualByComparingTo("200000");
@@ -278,5 +299,254 @@ class ExpenseServiceTest {
 
         assertThatThrownBy(() -> expenseService.deleteExpense(10L, 999L, user1))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("10. Thống kê tổng hợp ngân sách trong hạn mức với nhiều hạng mục")
+    void getBudgetSummary_withinBudget_returnsAccurateBreakdown() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(expenseRepository.findCategorySummariesByTripId(10L)).thenReturn(List.of(
+                projection(ExpenseCategory.ACCOMMODATION, "1800000", 1L),
+                projection(ExpenseCategory.TRANSPORT, "700000", 2L)
+        ));
+
+        BudgetSummaryResponse summary = expenseService.getBudgetSummary(10L, user1);
+
+        assertThat(summary.getTripId()).isEqualTo(10L);
+        assertThat(summary.getTotalBudget()).isEqualByComparingTo("5000000");
+        assertThat(summary.getTotalSpent()).isEqualByComparingTo("2500000");
+        assertThat(summary.getRemainingBudget()).isEqualByComparingTo("2500000");
+        assertThat(summary.getBudgetUsedPercentage()).isEqualByComparingTo("50.00");
+        assertThat(summary.getIsOverBudget()).isFalse();
+        assertThat(summary.getExpenseCount()).isEqualTo(3L);
+        assertThat(summary.getCategoryBreakdown()).hasSize(2);
+        assertThat(summary.getCategoryBreakdown().get(0).getCategory()).isEqualTo(ExpenseCategory.ACCOMMODATION);
+        assertThat(summary.getCategoryBreakdown().get(0).getCategoryLabel()).isEqualTo("Khách sạn");
+        assertThat(summary.getCategoryBreakdown().get(0).getPercentage()).isEqualByComparingTo("72.00");
+        assertThat(summary.getCategoryBreakdown().get(1).getCategory()).isEqualTo(ExpenseCategory.TRANSPORT);
+        assertThat(summary.getCategoryBreakdown().get(1).getPercentage()).isEqualByComparingTo("28.00");
+    }
+
+    @Test
+    @DisplayName("11. Thống kê bù phần dư (Largest Remainder) đảm bảo tổng phần trăm luôn đúng 100.00%")
+    void getBudgetSummary_largestRemainder_sumsExactlyTo100Percent() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(expenseRepository.findCategorySummariesByTripId(10L)).thenReturn(List.of(
+                projection(ExpenseCategory.ACCOMMODATION, "100000", 1L),
+                projection(ExpenseCategory.FOOD, "100000", 1L),
+                projection(ExpenseCategory.TRANSPORT, "100000", 1L)
+        ));
+
+        BudgetSummaryResponse summary = expenseService.getBudgetSummary(10L, user1);
+
+        assertThat(summary.getTotalSpent()).isEqualByComparingTo("300000");
+        assertThat(summary.getCategoryBreakdown()).hasSize(3);
+        assertThat(summary.getCategoryBreakdown().get(0).getPercentage()).isEqualByComparingTo("33.34");
+        assertThat(summary.getCategoryBreakdown().get(1).getPercentage()).isEqualByComparingTo("33.33");
+        assertThat(summary.getCategoryBreakdown().get(2).getPercentage()).isEqualByComparingTo("33.33");
+
+        BigDecimal totalPercent = summary.getCategoryBreakdown().stream()
+                .map(item -> item.getPercentage())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(totalPercent).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    @DisplayName("12. Thống kê khi chi tiêu vượt ngân sách và khi chưa thiết lập ngân sách")
+    void getBudgetSummary_overBudgetAndNullBudget_handlesCorrectly() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(expenseRepository.findCategorySummariesByTripId(10L)).thenReturn(List.of(
+                projection(ExpenseCategory.FOOD, "6000000", 4L)
+        ));
+
+        BudgetSummaryResponse overBudget = expenseService.getBudgetSummary(10L, user1);
+        assertThat(overBudget.getRemainingBudget()).isEqualByComparingTo("-1000000");
+        assertThat(overBudget.getBudgetUsedPercentage()).isEqualByComparingTo("120.00");
+        assertThat(overBudget.getIsOverBudget()).isTrue();
+
+        trip.setBudget(null);
+        when(expenseRepository.findCategorySummariesByTripId(10L)).thenReturn(List.of());
+        BudgetSummaryResponse noBudgetNoExpense = expenseService.getBudgetSummary(10L, user1);
+        assertThat(noBudgetNoExpense.getTotalBudget()).isNull();
+        assertThat(noBudgetNoExpense.getTotalSpent()).isEqualByComparingTo("0");
+        assertThat(noBudgetNoExpense.getRemainingBudget()).isNull();
+        assertThat(noBudgetNoExpense.getBudgetUsedPercentage()).isNull();
+        assertThat(noBudgetNoExpense.getIsOverBudget()).isFalse();
+        assertThat(noBudgetNoExpense.getCategoryBreakdown()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("13. Cập nhật ngân sách dự kiến thành công và trả về thống kê mới")
+    void updateTripBudget_valid_returnsUpdatedSummary() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(tripRepository.saveAndFlush(trip)).thenReturn(trip);
+        when(expenseRepository.findCategorySummariesByTripId(10L)).thenReturn(List.of(
+                projection(ExpenseCategory.TICKET, "1200000", 2L)
+        ));
+
+        BudgetSummaryResponse summary = expenseService.updateTripBudget(
+                10L,
+                BudgetUpdateRequest.builder().budget(new BigDecimal("8000000")).build(),
+                user1
+        );
+
+        verify(tripRepository).saveAndFlush(trip);
+        assertThat(trip.getBudget()).isEqualByComparingTo("8000000");
+        assertThat(summary.getTotalBudget()).isEqualByComparingTo("8000000");
+        assertThat(summary.getRemainingBudget()).isEqualByComparingTo("6800000");
+        assertThat(summary.getBudgetUsedPercentage()).isEqualByComparingTo("15.00");
+    }
+
+    @Test
+    @DisplayName("14. Từ chối ngân sách âm/thập phân và từ chối user không phải thành viên")
+    void budgetSummaryAndUpdate_invalidOrUnauthorized_throws() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+
+        assertThatThrownBy(() -> expenseService.updateTripBudget(
+                10L,
+                BudgetUpdateRequest.builder().budget(new BigDecimal("1000.5")).build(),
+                user1
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        when(tripSecurityService.getTripIfMember(10L, user2))
+                .thenThrow(new AccessDeniedException("Không có quyền"));
+        assertThatThrownBy(() -> expenseService.getBudgetSummary(10L, user2))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("15. Enum ExpenseCategory và Converter parse đúng mã chuẩn lẫn alias tiếng Việt")
+    void expenseCategory_parsesCodesAliasesAndLegacyDbValues() {
+        assertThat(ExpenseCategory.fromValue("FOOD")).isEqualTo(ExpenseCategory.FOOD);
+        assertThat(ExpenseCategory.fromValue("Ăn uống")).isEqualTo(ExpenseCategory.FOOD);
+        assertThat(ExpenseCategory.fromValue("Lưu trú")).isEqualTo(ExpenseCategory.ACCOMMODATION);
+        assertThat(ExpenseCategory.fromValue("Khách sạn")).isEqualTo(ExpenseCategory.ACCOMMODATION);
+        assertThat(ExpenseCategory.fromValue("Vé tham quan")).isEqualTo(ExpenseCategory.TICKET);
+        assertThat(ExpenseCategory.fromValue("Mua sắm")).isEqualTo(ExpenseCategory.SHOPPING);
+        assertThat(ExpenseCategory.fromValue("Khác")).isEqualTo(ExpenseCategory.OTHER);
+        assertThat(ExpenseCategory.fromValue("  ")).isNull();
+
+        assertThatThrownBy(() -> ExpenseCategory.fromValue("UNKNOWN_CAT"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        ExpenseCategoryConverter converter = new ExpenseCategoryConverter();
+        assertThat(converter.convertToDatabaseColumn(ExpenseCategory.TRANSPORT)).isEqualTo("TRANSPORT");
+        assertThat(converter.convertToDatabaseColumn(null)).isEqualTo("OTHER");
+        assertThat(converter.convertToEntityAttribute("Di chuyển")).isEqualTo(ExpenseCategory.TRANSPORT);
+        assertThat(converter.convertToEntityAttribute("LEGACY_CUSTOM")).isEqualTo(ExpenseCategory.OTHER);
+    }
+
+    @Test
+    @DisplayName("16. Từ chối phần tử null trong splits (không gây NullPointerException) và số tiền khoa học quá lớn")
+    void createExpense_nullSplitItemAndExtremeAmount_throwsIllegalArgument() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L)).thenReturn(Optional.of(member1));
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> {
+            Expense e = inv.getArgument(0);
+            e.setExpenseId(105L);
+            return e;
+        });
+
+        ExpenseRequest nullSplitReq = ExpenseRequest.builder()
+                .title("Chi phí lỗi split")
+                .amount(new BigDecimal("100000"))
+                .splitMethod("CUSTOM")
+                .splits(Arrays.asList((ExpenseSplitRequest) null))
+                .build();
+
+        assertThatThrownBy(() -> expenseService.createExpense(10L, nullSplitReq, user1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được để trống");
+
+        ExpenseRequest hugeAmountReq = ExpenseRequest.builder()
+                .title("Số tiền quá lớn")
+                .amount(new BigDecimal("1e1000000"))
+                .build();
+
+        assertThatThrownBy(() -> expenseService.createExpense(10L, hugeAmountReq, user1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tối đa 15 chữ số");
+    }
+
+    @Test
+    @DisplayName("17. Cập nhật khoản chi CUSTOM khi bỏ trống splitMethod -> giữ nguyên CUSTOM thay vì ép về EQUAL")
+    void updateExpense_nullSplitMethodOnCustom_preservesCustomMethod() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        Expense existing = Expense.builder()
+                .expenseId(100L).trip(trip).paidBy(user1).title("Vé").category(ExpenseCategory.TICKET)
+                .amount(new BigDecimal("500000")).splitMethod("CUSTOM").expenseDate(LocalDate.of(2026, 11, 15)).build();
+
+        when(expenseRepository.findByExpenseIdAndTripIdWithPayer(100L, 10L)).thenReturn(Optional.of(existing));
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L)).thenReturn(Optional.of(member1));
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 2L)).thenReturn(Optional.of(member2));
+        when(expenseSplitRepository.findAllByExpenseIdWithUser(100L)).thenReturn(List.of());
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(expenseSplitRepository.saveAllAndFlush(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExpenseRequest request = ExpenseRequest.builder()
+                .title("Vé cập nhật")
+                .amount(new BigDecimal("500000"))
+                .splits(List.of(
+                        ExpenseSplitRequest.builder().userId(1L).splitAmount(new BigDecimal("100000")).build(),
+                        ExpenseSplitRequest.builder().userId(2L).splitAmount(new BigDecimal("400000")).build()
+                ))
+                .build();
+
+        ExpenseResponse updated = expenseService.updateExpense(10L, 100L, request, user1);
+
+        assertThat(updated.getSplitMethod()).isEqualTo("CUSTOM");
+        assertThat(updated.getSplits().get(0).getSplitAmount()).isEqualByComparingTo("100000");
+        assertThat(updated.getSplits().get(1).getSplitAmount()).isEqualByComparingTo("400000");
+    }
+
+    @Test
+    @DisplayName("18. Tự đồng bộ OWNER cho trip cũ bằng insertOwnerIfMissingIgnoreConflict (an toàn khi chạy song song)")
+    void createExpense_legacyTripMissingOwnerMember_syncsSafely() {
+        when(tripSecurityService.getTripIfMember(10L, user1)).thenReturn(trip);
+        when(tripMemberRepository.findByTripIdAndUserIdWithUser(10L, 1L))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(member1));
+        when(tripMemberRepository.findByTripIdAndStatusWithUser(10L, "ACTIVE"))
+                .thenReturn(List.of(member1));
+        when(expenseRepository.saveAndFlush(any(Expense.class))).thenAnswer(inv -> {
+            Expense e = inv.getArgument(0);
+            e.setExpenseId(106L);
+            return e;
+        });
+        when(expenseSplitRepository.saveAllAndFlush(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        ExpenseRequest request = ExpenseRequest.builder()
+                .title("Chi phí trip cũ")
+                .amount(new BigDecimal("200000"))
+                .build();
+
+        ExpenseResponse created = expenseService.createExpense(10L, request, user1);
+
+        verify(tripMemberRepository).insertOwnerIfMissingIgnoreConflict(10L, 1L);
+        assertThat(created.getPaidByUserId()).isEqualTo(1L);
+        assertThat(created.getSplits()).hasSize(1);
+    }
+
+    private ExpenseCategorySummaryProjection projection(
+            ExpenseCategory category,
+            String totalAmount,
+            long count
+    ) {
+        return new ExpenseCategorySummaryProjection() {
+            @Override
+            public ExpenseCategory getCategory() {
+                return category;
+            }
+
+            @Override
+            public BigDecimal getTotalAmount() {
+                return new BigDecimal(totalAmount);
+            }
+
+            @Override
+            public Long getExpenseCount() {
+                return count;
+            }
+        };
     }
 }

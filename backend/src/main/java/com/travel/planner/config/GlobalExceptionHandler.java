@@ -52,12 +52,27 @@ public class GlobalExceptionHandler {
     // Bắt lỗi body JSON sai định dạng hoặc sai cấu trúc (không parse được)
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+        String customMessage = extractIllegalArgumentMessage(ex);
+        String msg = customMessage != null
+                ? customMessage
+                : "Dữ liệu gửi lên không đúng định dạng JSON hoặc sai cấu trúc.";
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
                 "Bad Request",
-                "Dữ liệu gửi lên không đúng định dạng JSON hoặc sai cấu trúc.",
+                msg,
                 "Dữ liệu gửi lên không đúng định dạng JSON hoặc sai cấu trúc."
         );
+    }
+
+    private String extractIllegalArgumentMessage(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof IllegalArgumentException && current.getMessage() != null && !current.getMessage().isBlank()) {
+                return current.getMessage();
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     // Bắt lỗi thiếu query parameter bắt buộc (@RequestParam)
