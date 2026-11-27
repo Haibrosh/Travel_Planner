@@ -137,17 +137,23 @@ public class TripService {
         if (rawBudget == null) {
             return null;
         }
+        // Kiểm tra cận trên/dưới trước khi stripTrailingZeros/setScale để tránh tràn bộ nhớ với số ký hiệu khoa học lớn
+        if (rawBudget.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến không được âm.");
+        }
+        if (rawBudget.compareTo(MAX_BUDGET) > 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến vượt quá giới hạn cho phép (tối đa 15 chữ số).");
+        }
+        if (rawBudget.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        if (rawBudget.compareTo(BigDecimal.ONE) < 0) {
+            throw new IllegalArgumentException("Ngân sách dự kiến phải là số nguyên không âm (không có phần thập phân).");
+        }
         BigDecimal normalized = rawBudget.stripTrailingZeros();
         if (normalized.scale() > 0) {
             throw new IllegalArgumentException("Ngân sách dự kiến phải là số nguyên không âm (không có phần thập phân).");
         }
-        BigDecimal integerBudget = normalized.setScale(0);
-        if (integerBudget.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Ngân sách dự kiến không được âm.");
-        }
-        if (integerBudget.compareTo(MAX_BUDGET) > 0) {
-            throw new IllegalArgumentException("Ngân sách dự kiến vượt quá giới hạn cho phép (tối đa 15 chữ số).");
-        }
-        return integerBudget;
+        return normalized.setScale(0);
     }
 }

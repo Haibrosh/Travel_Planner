@@ -7,6 +7,7 @@ import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
 import com.travel.planner.repository.ChecklistItemRepository;
 import com.travel.planner.security.TripSecurityService;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class ChecklistService {
 
     private final ChecklistItemRepository checklistItemRepository;
     private final TripSecurityService tripSecurityService;
+    private final EntityManager entityManager;
 
     // Lấy toàn bộ danh sách món đồ hành lý của chuyến đi
     @Transactional(readOnly = true)
@@ -49,7 +51,8 @@ public class ChecklistService {
                 .isCompleted(Boolean.TRUE.equals(request.getIsCompleted()))
                 .build();
 
-        ChecklistItem saved = checklistItemRepository.save(item);
+        ChecklistItem saved = checklistItemRepository.saveAndFlush(item);
+        entityManager.refresh(saved);
         return ChecklistItemResponse.fromEntity(saved);
     }
 
@@ -72,7 +75,8 @@ public class ChecklistService {
             item.setIsCompleted(request.getIsCompleted());
         }
 
-        ChecklistItem updated = checklistItemRepository.save(item);
+        ChecklistItem updated = checklistItemRepository.saveAndFlush(item);
+        entityManager.refresh(updated);
         return ChecklistItemResponse.fromEntity(updated);
     }
 
@@ -84,7 +88,8 @@ public class ChecklistService {
         ChecklistItem item = findItemInTrip(tripId, itemId);
         item.setIsCompleted(!Boolean.TRUE.equals(item.getIsCompleted()));
 
-        ChecklistItem updated = checklistItemRepository.save(item);
+        ChecklistItem updated = checklistItemRepository.saveAndFlush(item);
+        entityManager.refresh(updated);
         return ChecklistItemResponse.fromEntity(updated);
     }
 

@@ -7,6 +7,7 @@ import com.travel.planner.model.Trip;
 import com.travel.planner.model.User;
 import com.travel.planner.repository.ChecklistItemRepository;
 import com.travel.planner.security.TripSecurityService;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,9 @@ class ChecklistServiceTest {
 
     @Mock
     private TripSecurityService tripSecurityService;
+
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private ChecklistService checklistService;
@@ -78,7 +82,7 @@ class ChecklistServiceTest {
     @DisplayName("2. Tạo mới hành lý thành công với giá trị mặc định cho category và isCompleted")
     void createChecklistItem_defaults_success() {
         when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
-        when(checklistItemRepository.save(any(ChecklistItem.class))).thenAnswer(invocation -> {
+        when(checklistItemRepository.saveAndFlush(any(ChecklistItem.class))).thenAnswer(invocation -> {
             ChecklistItem saved = invocation.getArgument(0);
             saved.setItemId(5L);
             return saved;
@@ -105,7 +109,7 @@ class ChecklistServiceTest {
                 .itemId(5L).trip(trip).name("Áo khoác").category("Trang phục").isCompleted(false).build();
 
         when(checklistItemRepository.findByItemIdAndTrip_TripId(5L, 10L)).thenReturn(Optional.of(existing));
-        when(checklistItemRepository.save(any(ChecklistItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(checklistItemRepository.saveAndFlush(any(ChecklistItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ChecklistItemRequest request = ChecklistItemRequest.builder()
                 .name("Áo gió chống nước")
@@ -127,7 +131,7 @@ class ChecklistServiceTest {
                 .itemId(5L).trip(trip).name("Hộ chiếu").category("Giấy tờ").isCompleted(false).build();
 
         when(checklistItemRepository.findByItemIdAndTrip_TripId(5L, 10L)).thenReturn(Optional.of(existing));
-        when(checklistItemRepository.save(any(ChecklistItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(checklistItemRepository.saveAndFlush(any(ChecklistItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ChecklistItemResponse firstToggle = checklistService.toggleChecklistItem(10L, 5L, currentUser);
         assertThat(firstToggle.getIsCompleted()).isTrue();

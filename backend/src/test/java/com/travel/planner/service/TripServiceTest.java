@@ -459,4 +459,32 @@ class TripServiceTest {
 
         verify(tripRepository, never()).saveAndFlush(any());
     }
+
+    @Test
+    @DisplayName("22. Tạo chuyến đi với ngân sách ký hiệu khoa học quá lớn hoặc thập phân < 1 -> ném IllegalArgumentException")
+    void createTrip_extremeScientificBudget_throwsIllegalArgumentException() {
+        TripRequest hugeReq = new TripRequest();
+        hugeReq.setProvinceCode("DN");
+        hugeReq.setName("Ngân sách quá lớn");
+        hugeReq.setStartDate(LocalDate.of(2026, 11, 10));
+        hugeReq.setEndDate(LocalDate.of(2026, 11, 12));
+        hugeReq.setBudget(new BigDecimal("1e1000000"));
+
+        when(destinationRepository.findById("DN")).thenReturn(Optional.of(daNang));
+
+        assertThatThrownBy(() -> tripService.createTrip(hugeReq, owner))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tối đa 15 chữ số");
+
+        TripRequest tinyReq = new TripRequest();
+        tinyReq.setProvinceCode("DN");
+        tinyReq.setName("Ngân sách thập phân");
+        tinyReq.setStartDate(LocalDate.of(2026, 11, 10));
+        tinyReq.setEndDate(LocalDate.of(2026, 11, 12));
+        tinyReq.setBudget(new BigDecimal("1e-1000000"));
+
+        assertThatThrownBy(() -> tripService.createTrip(tinyReq, owner))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("số nguyên không âm");
+    }
 }
