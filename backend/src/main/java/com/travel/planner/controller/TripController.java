@@ -40,7 +40,7 @@ public class TripController {
         return ResponseEntity.ok(tripService.getMyTrips(currentUser.getUser()));
     }
 
-    // API Xem chi tiết một chuyến đi theo ID - chỉ chủ sở hữu mới xem được (GET /api/v1/trips/{id})
+    // API Xem chi tiết một chuyến đi theo ID - OWNER hoặc COLLABORATOR đang ACTIVE (GET /api/v1/trips/{id})
     @GetMapping("/{id}")
     public ResponseEntity<TripResponse> getTripById(
             @PathVariable("id") Long id,

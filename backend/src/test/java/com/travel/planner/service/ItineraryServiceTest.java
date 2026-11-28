@@ -88,7 +88,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("1. Lấy danh sách lịch trình thành công trả về đúng thứ tự")
     void getItinerary_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item1 = ItineraryItem.builder()
                 .itemId(1L)
@@ -125,7 +125,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("2. Thêm địa điểm vào ngày thành công - tự động gán orderIndex ở cuối danh sách")
     void addItineraryItem_success_appendsToEnd() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
         when(itineraryItemRepository.findMaxPositionIndexByTripIdAndDayNumber(10L, 2)).thenReturn(Optional.of(2.0));
 
@@ -153,7 +153,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("3. Thêm địa điểm vào ngày chưa có điểm nào -> orderIndex khởi tạo = 1.0")
     void addItineraryItem_success_firstItemOfDay() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
         when(itineraryItemRepository.findMaxPositionIndexByTripIdAndDayNumber(10L, 1)).thenReturn(Optional.empty());
 
@@ -176,7 +176,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("4. Thêm địa điểm thất bại nếu dayNumber vượt quá tổng số ngày chuyến đi")
     void addItineraryItem_dayNumberExceedsMaxDays_throwsIllegalArgumentException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
 
         CreateItineraryItemRequest request = CreateItineraryItemRequest.builder()
@@ -192,7 +192,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("5. Thêm địa điểm thất bại nếu endTime trước startTime")
     void addItineraryItem_endTimeBeforeStartTime_throwsIllegalArgumentException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
 
         CreateItineraryItemRequest request = CreateItineraryItemRequest.builder()
@@ -210,7 +210,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("6. Cập nhật thời gian tham quan thành công")
     void updateItineraryItem_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem existing = ItineraryItem.builder()
                 .itemId(7L)
@@ -241,7 +241,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("7. Cập nhật kèm reorder thành công khi truyền prevItemId/nextItemId trong PUT")
     void updateItineraryItem_withReorder_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem existing = ItineraryItem.builder()
                 .itemId(7L)
@@ -273,7 +273,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("8. Xóa cứng một địa điểm khỏi lịch trình thành công")
     void deleteItineraryItem_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem existing = ItineraryItem.builder()
                 .itemId(8L)
@@ -293,7 +293,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("9. Không có quyền thao tác trên trip của người khác -> ném AccessDeniedException")
     void getItinerary_notOwner_throwsAccessDeniedException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser))
+        when(tripSecurityService.getTripIfMember(10L, currentUser))
                 .thenThrow(new AccessDeniedException("Bạn không có quyền"));
 
         assertThatThrownBy(() -> itineraryService.getItinerary(10L, currentUser))
@@ -305,7 +305,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("10. Kéo lên đầu ngày khi còn khoảng trống -> chia đôi (nextIndex / 2.0)")
     void reorder_moveToTop_dividesNextIndex() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(3L).dayNumber(1).positionIndex(3.0).trip(trip).place(place).build();
         ItineraryItem firstItem = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.0).build();
@@ -329,7 +329,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("11. Kéo lên đầu ngày khi đã chia nhỏ nhất (nextIndex <= MIN_INTERVAL) -> Rebalance toàn bộ")
     void reorder_moveToTop_tooSmall_triggersRebalance() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(3L).dayNumber(1).positionIndex(3.0).trip(trip).place(place).build();
         ItineraryItem firstItem = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(0.00005).build();
@@ -355,7 +355,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("12. Kéo vào giữa 2 item khi còn khoảng cách -> chia đôi (prev + next) / 2.0")
     void reorder_moveToMiddle_calculatesMidpoint() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(3L).dayNumber(1).positionIndex(4.0).trip(trip).place(place).build();
         ItineraryItem prevItem = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.0).build();
@@ -380,7 +380,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("13. Kéo vào giữa 2 item khi khoảng cách < MIN_INTERVAL -> Rebalance lại toàn bộ ngày")
     void reorder_moveToMiddle_tooSmall_triggersRebalance() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(3L).dayNumber(1).positionIndex(4.0).trip(trip).place(place).build();
         ItineraryItem prevItem = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.00000).build();
@@ -408,7 +408,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("14. Kéo xuống cuối danh sách ngày -> prevIndex + 1.0")
     void reorder_moveToEnd_calculatesPrevPlusStep() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.0).trip(trip).place(place).build();
         ItineraryItem lastItem = ItineraryItem.builder().itemId(2L).dayNumber(1).positionIndex(2.5).build();
@@ -431,7 +431,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("15. Kéo thả sang ngày khác thành công")
     void reorder_crossDay_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(5L).dayNumber(1).positionIndex(1.0).trip(trip).place(place).build();
         ItineraryItem day2Item = ItineraryItem.builder().itemId(8L).dayNumber(2).positionIndex(2.0).build();
@@ -456,7 +456,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("16. Kéo thả với orderIndex trực tiếp - không quá sát thì gán trực tiếp")
     void reorder_directOrderIndex_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemToMove = ItineraryItem.builder().itemId(5L).dayNumber(1).positionIndex(1.0).trip(trip).place(place).build();
         ItineraryItem otherItem = ItineraryItem.builder().itemId(6L).dayNumber(1).positionIndex(2.0).build();
@@ -479,7 +479,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("17. Batch reorder đổi thứ tự trong cùng 1 ngày thành công và chuẩn hóa index 1.0, 2.0, 3.0")
     void reorderItinerary_sameDay_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
         ItineraryItem item2 = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
@@ -504,7 +504,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("18. Batch reorder chuyển địa điểm sang ngày khác thành công - chuẩn hóa cả ngày nguồn và ngày đích")
     void reorderItinerary_crossDay_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         // Ngày 1 ban đầu: [1, 2, 3]; Ngày 2 ban đầu: [4]
         // Chuyển item 2 từ Ngày 1 sang vị trí đầu của Ngày 2 (không truyền item 1, 3 của Ngày 1)
@@ -541,7 +541,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("19. Batch reorder tự động xử lý orderIndex trùng hoặc lệch thành 1.0, 2.0, 3.0...")
     void reorderItinerary_duplicateOrSkewedOrderIndex_normalizesIndices() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
         ItineraryItem item2 = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
@@ -566,7 +566,7 @@ class ItineraryServiceTest {
     @DisplayName("20. Batch reorder thất bại -> ném AccessDeniedException khi sai quyền truy cập")
     void reorderItinerary_notOwner_throwsAccessDeniedException() {
         User outsider = User.builder().userId(99L).email("outsider@travel.com").username("outsider").build();
-        when(tripSecurityService.getTripIfOwner(10L, outsider))
+        when(tripSecurityService.getTripIfMember(10L, outsider))
                 .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác."));
 
         List<ReorderItemRequest> requests = List.of(
@@ -582,7 +582,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("21. Batch reorder thất bại khi itemId không thuộc về chuyến đi")
     void reorderItinerary_itemNotInTrip_throwsEntityNotFoundException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item1 = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
         when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item1));
@@ -601,7 +601,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("22. Batch reorder thất bại khi dayNumber vượt quá tổng số ngày chuyến đi")
     void reorderItinerary_dayNumberExceedsMaxDays_throwsIllegalArgumentException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         List<ReorderItemRequest> requests = List.of(
                 ReorderItemRequest.builder().itemId(1L).dayNumber(10).orderIndex(1.0).build()
@@ -617,7 +617,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("23. Batch reorder thất bại khi danh sách rỗng")
     void reorderItinerary_emptyRequest_throwsIllegalArgumentException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, List.of(), currentUser))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -630,7 +630,7 @@ class ItineraryServiceTest {
     @DisplayName("24. Các thao tác thêm/sửa/xóa/reorder đơn lẻ đều ném AccessDeniedException khi sai quyền")
     void singleItemOperations_notOwner_throwsAccessDeniedException() {
         User outsider = User.builder().userId(99L).email("outsider@travel.com").username("outsider").build();
-        when(tripSecurityService.getTripIfOwner(10L, outsider))
+        when(tripSecurityService.getTripIfMember(10L, outsider))
                 .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác."));
 
         CreateItineraryItemRequest addReq = CreateItineraryItemRequest.builder().placeId(100L).dayNumber(1).build();
@@ -654,7 +654,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("25. Thêm địa điểm thất bại khi không tìm thấy Place -> ném EntityNotFoundException")
     void addItineraryItem_placeNotFound_throwsEntityNotFoundException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(999L)).thenReturn(Optional.empty());
 
         CreateItineraryItemRequest request = CreateItineraryItemRequest.builder()
@@ -671,7 +671,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("26. Thêm địa điểm xử lý trim note hợp lệ và chuyển note toàn khoảng trắng thành null")
     void addItineraryItem_handlesNoteTrimAndBlank() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
         when(itineraryItemRepository.findMaxPositionIndexByTripIdAndDayNumber(10L, 1)).thenReturn(Optional.of(1.0));
         when(itineraryItemRepository.save(any(ItineraryItem.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -696,7 +696,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("27. Cập nhật item thất bại khi không tìm thấy item hoặc endTime < startTime")
     void updateItineraryItem_notFoundAndInvalidTimes_throwsExceptions() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(999L, 10L)).thenReturn(Optional.empty());
 
         UpdateItineraryItemRequest req = UpdateItineraryItemRequest.builder().note("test").build();
@@ -717,7 +717,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("28. Cập nhật đồng thời thời gian/xóa note trắng và đổi vị trí orderIndex")
     void updateItineraryItem_withBlankNoteAndOrderIndex_updatesAndReorders() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem existing = ItineraryItem.builder()
                 .itemId(7L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).note("Ghi chú cũ").build();
@@ -743,7 +743,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("29. Xóa item thất bại khi không tìm thấy itemId thuộc trip")
     void deleteItineraryItem_notFound_throwsEntityNotFoundException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(itineraryItemRepository.findByItemIdAndTrip_TripId(999L, 10L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> itineraryService.deleteItineraryItem(10L, 999L, currentUser))
@@ -754,7 +754,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("30. Reorder đơn lẻ thất bại khi item không tồn tại hoặc targetDayNumber không hợp lệ")
     void reorderItineraryItem_invalidItemOrTargetDay_throwsExceptions() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
         when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(999L, 10L)).thenReturn(Optional.empty());
 
         ReorderItineraryItemRequest req = ReorderItineraryItemRequest.builder().orderIndex(1.0).build();
@@ -776,7 +776,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("31. Reorder với orderIndex quá sát item khác -> kích hoạt rebalanceWithItem")
     void reorder_directOrderIndex_tooClose_triggersRebalance() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item1 = ItineraryItem.builder().itemId(1L).dayNumber(1).positionIndex(1.0).build();
         ItineraryItem item2 = ItineraryItem.builder().itemId(2L).dayNumber(1).positionIndex(2.0).build();
@@ -801,7 +801,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("32. Reorder thất bại khi prevItemId hoặc nextItemId không tồn tại")
     void reorder_missingPrevOrNext_throwsEntityNotFoundException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item = ItineraryItem.builder().itemId(5L).dayNumber(1).positionIndex(1.0).trip(trip).place(place).build();
         when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(item));
@@ -824,7 +824,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("33. Reorder với prevItem và nextItem đều null -> gán 1.0 nếu ngày trống, rebalance nếu đã có item khác")
     void reorder_bothPrevAndNextNull_handlesEmptyAndNonEmptyDay() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem item = ItineraryItem.builder().itemId(5L).dayNumber(2).positionIndex(5.0).trip(trip).place(place).build();
         when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(5L, 10L)).thenReturn(Optional.of(item));
@@ -847,7 +847,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("34. Batch reorder kiểm tra đầy đủ validate đầu vào không hợp lệ (null, NaN, Infinite, trùng itemId, dayNumber < 1)")
     void reorderItinerary_invalidInputs_throwsIllegalArgumentException() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         assertThatThrownBy(() -> itineraryService.reorderItinerary(10L, null, currentUser))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -890,7 +890,7 @@ class ItineraryServiceTest {
     @Test
     @DisplayName("35. Batch reorder chuyển item về danh sách chưa xếp ngày (dayNumber = null) và xử lý trùng positionIndex với item ngoài request")
     void reorderItinerary_unassignedDayAndMixedTieBreaking_success() {
-        when(tripSecurityService.getTripIfOwner(10L, currentUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, currentUser)).thenReturn(trip);
 
         ItineraryItem itemInReq = ItineraryItem.builder().itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(2.0).build();
         ItineraryItem itemNotInReqA = ItineraryItem.builder().itemId(2L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
@@ -915,5 +915,36 @@ class ItineraryServiceTest {
         assertThat(result).hasSize(4);
         assertThat(result.get(3).getItemId()).isEqualTo(4L);
         assertThat(result.get(3).getDayNumber()).isNull();
+    }
+
+    @Test
+    @DisplayName("36. COLLABORATOR đang ACTIVE được phép xem, thêm, sửa, sắp xếp và xóa lịch trình")
+    void collaborator_canManageItinerary() {
+        User collaborator = User.builder()
+                .userId(2L)
+                .email("collab@travel.com")
+                .username("collabuser")
+                .build();
+        when(tripSecurityService.getTripIfMember(10L, collaborator)).thenReturn(trip);
+
+        ItineraryItem item = ItineraryItem.builder()
+                .itemId(1L).trip(trip).place(place).dayNumber(1).positionIndex(1.0).build();
+        when(itineraryItemRepository.findAllByTripIdWithPlace(10L)).thenReturn(List.of(item));
+        when(placeRepository.findById(100L)).thenReturn(Optional.of(place));
+        when(itineraryItemRepository.findMaxPositionIndexByTripIdAndDayNumber(10L, 1)).thenReturn(Optional.of(1.0));
+        when(itineraryItemRepository.save(any(ItineraryItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(itineraryItemRepository.findByItemIdAndTripIdWithPlace(1L, 10L)).thenReturn(Optional.of(item));
+        when(itineraryItemRepository.findByItemIdAndTrip_TripId(1L, 10L)).thenReturn(Optional.of(item));
+
+        assertThat(itineraryService.getItinerary(10L, collaborator)).hasSize(1);
+
+        CreateItineraryItemRequest addReq = CreateItineraryItemRequest.builder().placeId(100L).dayNumber(1).build();
+        assertThat(itineraryService.addItineraryItem(10L, addReq, collaborator).getOrderIndex()).isEqualTo(2.0);
+
+        UpdateItineraryItemRequest updateReq = UpdateItineraryItemRequest.builder().note("Collab note").build();
+        assertThat(itineraryService.updateItineraryItem(10L, 1L, updateReq, collaborator).getNote()).isEqualTo("Collab note");
+
+        itineraryService.deleteItineraryItem(10L, 1L, collaborator);
+        verify(itineraryItemRepository).delete(item);
     }
 }

@@ -51,7 +51,7 @@ public class ItineraryService {
     // Lấy danh sách tất cả địa điểm trong lịch trình theo thứ tự ngày và vị trí
     @Transactional(readOnly = true)
     public List<ItineraryItemResponse> getItinerary(Long tripId, User currentUser) {
-        tripSecurityService.getTripIfOwner(tripId, currentUser);
+        tripSecurityService.getTripIfMember(tripId, currentUser);
 
         return itineraryItemRepository.findAllByTripIdWithPlace(tripId)
                 .stream()
@@ -62,7 +62,7 @@ public class ItineraryService {
     // Thêm địa điểm vào ngày trong lịch trình, tự động gán orderIndex ở cuối danh sách ngày đó
     @Transactional
     public ItineraryItemResponse addItineraryItem(Long tripId, CreateItineraryItemRequest request, User currentUser) {
-        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
 
         Place place = placeRepository.findById(request.getPlaceId())
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy địa điểm với ID: " + request.getPlaceId()));
@@ -98,7 +98,7 @@ public class ItineraryService {
     // Cập nhật thông tin thời gian tham quan, ghi chú (và tùy chọn đổi vị trí nếu có thông tin thứ tự)
     @Transactional
     public ItineraryItemResponse updateItineraryItem(Long tripId, Long itemId, UpdateItineraryItemRequest request, User currentUser) {
-        tripSecurityService.getTripIfOwner(tripId, currentUser);
+        tripSecurityService.getTripIfMember(tripId, currentUser);
 
         ItineraryItem item = itineraryItemRepository.findByItemIdAndTripIdWithPlace(itemId, tripId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy mục lịch trình với ID: " + itemId));
@@ -133,7 +133,7 @@ public class ItineraryService {
     // Xóa cứng một địa điểm khỏi lịch trình
     @Transactional
     public void deleteItineraryItem(Long tripId, Long itemId, User currentUser) {
-        tripSecurityService.getTripIfOwner(tripId, currentUser);
+        tripSecurityService.getTripIfMember(tripId, currentUser);
 
         ItineraryItem item = itineraryItemRepository.findByItemIdAndTrip_TripId(itemId, tripId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy mục lịch trình với ID: " + itemId));
@@ -144,7 +144,7 @@ public class ItineraryService {
     // Thay đổi thứ tự địa điểm khi kéo thả (chia đôi orderIndex, tự rebalance khi đạt giới hạn)
     @Transactional
     public ItineraryItemResponse reorderItineraryItem(Long tripId, Long itemId, ReorderItineraryItemRequest request, User currentUser) {
-        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
 
         ItineraryItem item = itineraryItemRepository.findByItemIdAndTripIdWithPlace(itemId, tripId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy mục lịch trình với ID: " + itemId));
@@ -211,7 +211,7 @@ public class ItineraryService {
             Long tripId,
             List<ReorderItemRequest> requests,
             User currentUser) {
-        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
 
         if (requests == null || requests.isEmpty()) {
             throw new IllegalArgumentException("Danh sách địa điểm cần sắp xếp không được để trống.");

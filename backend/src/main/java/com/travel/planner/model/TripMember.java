@@ -6,13 +6,17 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "trip_members", schema = "app")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"trip", "user"})
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class TripMember {
 
     @EmbeddedId
+    @EqualsAndHashCode.Include
     private TripMemberId id;
 
     @MapsId("tripId")
@@ -35,6 +39,6 @@ public class TripMember {
     @Builder.Default
     private String status = "ACTIVE";
 
-    @Column(name = "joined_at", insertable = false, updatable = false)
+    @Column(name = "joined_at", insertable = false)
     private LocalDateTime joinedAt;
 }

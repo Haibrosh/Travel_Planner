@@ -1,6 +1,7 @@
 package com.travel.planner.config;
 
 import com.travel.planner.dto.ErrorResponse;
+import io.jsonwebtoken.JwtException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -160,6 +161,17 @@ public class GlobalExceptionHandler {
                 "Bad Request",
                 ex.getMessage(),
                 "Yêu cầu không hợp lệ."
+        );
+    }
+
+    // Bắt lỗi JWT (ví dụ: invite token hết hạn hoặc sai chữ ký -> trả về 400 Bad Request)
+    @ExceptionHandler(JwtException.class)
+    public ResponseEntity<ErrorResponse> handleJwtException(JwtException ex) {
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                ex.getMessage(),
+                "Token không hợp lệ hoặc đã hết hạn."
         );
     }
 

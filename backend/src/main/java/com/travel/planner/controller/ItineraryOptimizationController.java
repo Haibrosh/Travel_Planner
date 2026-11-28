@@ -40,9 +40,7 @@ public class ItineraryOptimizationController {
             @RequestParam("dayNumber") Integer dayNumber,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
 
-        if (currentUser != null && currentUser.getUser() != null) {
-            tripSecurityService.getTripIfOwner(tripId, currentUser.getUser());
-        }
+        tripSecurityService.getTripIfMember(tripId, currentUser != null ? currentUser.getUser() : null);
 
         // 1. Load items for the given trip & day, ordered by current positionIndex
         List<ItineraryItem> items = itineraryItemService.getItemsByTripAndDay(tripId, dayNumber);

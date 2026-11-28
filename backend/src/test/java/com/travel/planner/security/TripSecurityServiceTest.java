@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,7 +55,6 @@ class TripSecurityServiceTest {
     @DisplayName("1. getTripIfMember cho phép owner truy cập")
     void getTripIfMember_owner_success() {
         when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
-        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndStatus(10L, 1L, "ACTIVE")).thenReturn(false);
 
         Trip result = tripSecurityService.getTripIfMember(10L, owner);
 
@@ -62,10 +62,11 @@ class TripSecurityServiceTest {
     }
 
     @Test
-    @DisplayName("2. getTripIfMember cho phép thành viên ACTIVE truy cập")
+    @DisplayName("2. getTripIfMember cho phép COLLABORATOR đang ACTIVE truy cập")
     void getTripIfMember_activeMember_success() {
         when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
-        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndStatus(10L, 2L, "ACTIVE")).thenReturn(true);
+        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndRoleInAndStatus(
+                10L, 2L, List.of("OWNER", "COLLABORATOR"), "ACTIVE")).thenReturn(true);
 
         Trip result = tripSecurityService.getTripIfMember(10L, collaborator);
 
@@ -76,7 +77,8 @@ class TripSecurityServiceTest {
     @DisplayName("3. getTripIfMember chặn người ngoài hoặc thành viên đã LEFT")
     void getTripIfMember_outsider_throwsAccessDenied() {
         when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
-        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndStatus(10L, 3L, "ACTIVE")).thenReturn(false);
+        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndRoleInAndStatus(
+                10L, 3L, List.of("OWNER", "COLLABORATOR"), "ACTIVE")).thenReturn(false);
 
         assertThatThrownBy(() -> tripSecurityService.getTripIfMember(10L, outsider))
                 .isInstanceOf(AccessDeniedException.class);
@@ -89,5 +91,37 @@ class TripSecurityServiceTest {
 
         assertThatThrownBy(() -> tripSecurityService.getTripIfMember(99L, owner))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("5. getTripIfOwner chỉ cho phép OWNER, chặn COLLABORATOR")
+    void getTripIfOwner_onlyAllowsOwner() {
+        when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
+
+        assertThat(tripSecurityService.getTripIfOwner(10L, owner)).isSameAs(trip);
+        assertThatThrownBy(() -> tripSecurityService.getTripIfOwner(10L, collaborator))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> tripSecurityService.getTripIfOwner(10L, null))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("6. Kiểm tra các helper phân quyền isMember, isActiveCollaborator, canEditTripContent, getTripIfCanEdit")
+    void permissionHelpers_workCorrectly() {
+        when(tripRepository.existsByTripIdAndOwner_UserId(10L, 1L)).thenReturn(true);
+        when(tripRepository.existsByTripIdAndOwner_UserId(10L, 2L)).thenReturn(false);
+        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndRoleInAndStatus(
+                10L, 2L, List.of("OWNER", "COLLABORATOR"), "ACTIVE")).thenReturn(true);
+        when(tripMemberRepository.existsByTrip_TripIdAndUser_UserIdAndRoleAndStatus(
+                10L, 2L, "COLLABORATOR", "ACTIVE")).thenReturn(true);
+        when(tripRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(trip));
+
+        assertThat(tripSecurityService.isOwner(10L, 1L)).isTrue();
+        assertThat(tripSecurityService.isMember(10L, 1L)).isTrue();
+        assertThat(tripSecurityService.canEditTripContent(10L, 2L)).isTrue();
+        assertThat(tripSecurityService.isActiveCollaborator(10L, 2L)).isTrue();
+        assertThat(tripSecurityService.isMember(null, 2L)).isFalse();
+        assertThat(tripSecurityService.isActiveCollaborator(10L, null)).isFalse();
+        assertThat(tripSecurityService.getTripIfCanEdit(10L, collaborator)).isSameAs(trip);
     }
 }

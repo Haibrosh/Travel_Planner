@@ -57,19 +57,19 @@ public class TripService {
         return TripResponse.fromEntity(savedTrip);
     }
 
-    // Lấy danh sách tất cả chuyến đi của user đang đăng nhập
+    // Lấy danh sách tất cả chuyến đi mà user là chủ sở hữu hoặc thành viên đang ACTIVE
     @Transactional(readOnly = true)
     public List<TripResponse> getMyTrips(User currentUser) {
-        return tripRepository.findAllByOwnerIdWithDetails(currentUser.getUserId())
+        return tripRepository.findAllAccessibleByUserWithDetails(currentUser.getUserId())
                 .stream()
                 .map(TripResponse::fromEntity)
                 .toList();
     }
 
-    // Xem thông tin chi tiết một chuyến đi (chỉ chủ sở hữu mới xem được)
+    // Xem thông tin chi tiết một chuyến đi (OWNER hoặc COLLABORATOR đang ACTIVE)
     @Transactional(readOnly = true)
     public TripResponse getTripById(Long tripId, User currentUser) {
-        Trip trip = tripSecurityService.getTripIfOwner(tripId, currentUser);
+        Trip trip = tripSecurityService.getTripIfMember(tripId, currentUser);
         return TripResponse.fromEntity(trip);
     }
 

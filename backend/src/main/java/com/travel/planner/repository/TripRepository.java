@@ -51,6 +51,22 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
             """)
     List<Trip> findAllAccessibleByUser(@Param("userId") Long userId);
 
+    // Lấy tất cả trip user có quyền truy cập (là owner HOẶC là member đang ACTIVE) kèm Owner & Destination
+    @Query("""
+            SELECT t FROM Trip t
+            JOIN FETCH t.owner
+            JOIN FETCH t.destination
+            WHERE t.owner.userId = :userId
+               OR EXISTS (
+                   SELECT 1 FROM TripMember m
+                   WHERE m.trip = t
+                     AND m.user.userId = :userId
+                     AND m.status = 'ACTIVE'
+               )
+            ORDER BY t.createdAt DESC
+            """)
+    List<Trip> findAllAccessibleByUserWithDetails(@Param("userId") Long userId);
+
     // Kiểm tra user có phải owner của trip không (dùng cho quyền xóa trip / đổi quyền)
     boolean existsByTripIdAndOwner_UserId(Long tripId, Long ownerId);
 }
