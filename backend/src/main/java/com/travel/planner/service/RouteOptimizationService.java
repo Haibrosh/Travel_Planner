@@ -28,7 +28,7 @@ public class RouteOptimizationService {
     // Sắp xếp lại position_index cho các địa điểm của một ngày và trả về tổng quãng đường (km)
     @Transactional
     public RouteOptimizationResponse optimizeDayRoute(Long tripId, Integer dayNumber, User currentUser) {
-        tripSecurityService.getTripIfOwner(tripId, currentUser);
+        tripSecurityService.getTripIfMember(tripId, currentUser);
 
         List<ItineraryItem> dayItems = itineraryItemRepository
                 .findByTripTripIdOrderByDayNumberAscPositionIndexAsc(tripId)

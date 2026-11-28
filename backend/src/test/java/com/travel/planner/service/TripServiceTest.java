@@ -160,7 +160,7 @@ class TripServiceTest {
     @Test
     @DisplayName("4. Lấy danh sách chuyến đi của user hiện tại thành công")
     void getMyTrips_success() {
-        when(tripRepository.findAllByOwnerIdWithDetails(1L)).thenReturn(List.of(trip));
+        when(tripRepository.findAllAccessibleByUserWithDetails(1L)).thenReturn(List.of(trip));
 
         List<TripResponse> result = tripService.getMyTrips(owner);
 
@@ -171,9 +171,9 @@ class TripServiceTest {
     }
 
     @Test
-    @DisplayName("5. Xem chi tiết chuyến đi thành công khi là chủ sở hữu")
+    @DisplayName("5. Xem chi tiết chuyến đi thành công khi là chủ sở hữu hoặc thành viên ACTIVE")
     void getTripById_owner_success() {
-        when(tripSecurityService.getTripIfOwner(10L, owner)).thenReturn(trip);
+        when(tripSecurityService.getTripIfMember(10L, owner)).thenReturn(trip);
 
         TripResponse result = tripService.getTripById(10L, owner);
 
@@ -183,10 +183,10 @@ class TripServiceTest {
     }
 
     @Test
-    @DisplayName("6. Xem chi tiết chuyến đi thất bại -> ném AccessDeniedException khi không phải owner")
+    @DisplayName("6. Xem chi tiết chuyến đi thất bại -> ném AccessDeniedException khi không phải thành viên")
     void getTripById_notOwner_throwsAccessDeniedException() {
-        when(tripSecurityService.getTripIfOwner(10L, otherUser))
-                .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi của người khác."));
+        when(tripSecurityService.getTripIfMember(10L, otherUser))
+                .thenThrow(new AccessDeniedException("Bạn không có quyền xem hoặc thao tác trên chuyến đi này."));
 
         assertThatThrownBy(() -> tripService.getTripById(10L, otherUser))
                 .isInstanceOf(AccessDeniedException.class);
@@ -195,7 +195,7 @@ class TripServiceTest {
     @Test
     @DisplayName("7. Xem chi tiết chuyến đi thất bại -> ném EntityNotFoundException khi trip không tồn tại")
     void getTripById_notFound_throwsEntityNotFoundException() {
-        when(tripSecurityService.getTripIfOwner(999L, owner))
+        when(tripSecurityService.getTripIfMember(999L, owner))
                 .thenThrow(new EntityNotFoundException("Không tìm thấy chuyến đi với ID: 999"));
 
         assertThatThrownBy(() -> tripService.getTripById(999L, owner))
@@ -331,7 +331,7 @@ class TripServiceTest {
     @Test
     @DisplayName("15. Lấy danh sách chuyến đi khi user chưa có chuyến đi nào -> trả về danh sách rỗng")
     void getMyTrips_emptyList_returnsEmpty() {
-        when(tripRepository.findAllByOwnerIdWithDetails(1L)).thenReturn(List.of());
+        when(tripRepository.findAllAccessibleByUserWithDetails(1L)).thenReturn(List.of());
 
         List<TripResponse> result = tripService.getMyTrips(owner);
 
@@ -486,5 +486,27 @@ class TripServiceTest {
         assertThatThrownBy(() -> tripService.createTrip(tinyReq, owner))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("số nguyên không âm");
+    }
+
+    @Test
+    @DisplayName("23. COLLABORATOR ACTIVE xem được chi tiết chuyến đi nhưng không sửa/xóa được thông tin gốc của trip")
+    void collaborator_canViewTrip_butCannotUpdateOrDeleteTrip() {
+        when(tripSecurityService.getTripIfMember(10L, otherUser)).thenReturn(trip);
+        when(tripSecurityService.getTripIfOwner(10L, otherUser))
+                .thenThrow(new AccessDeniedException("Chỉ chủ sở hữu mới có quyền thao tác."));
+
+        TripResponse viewed = tripService.getTripById(10L, otherUser);
+        assertThat(viewed.getTripId()).isEqualTo(10L);
+
+        TripRequest updateReq = new TripRequest();
+        updateReq.setProvinceCode("DN");
+        updateReq.setName("Collaborator sửa tên");
+        updateReq.setStartDate(LocalDate.of(2026, 11, 10));
+        updateReq.setEndDate(LocalDate.of(2026, 11, 14));
+
+        assertThatThrownBy(() -> tripService.updateTrip(10L, updateReq, otherUser))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> tripService.deleteTrip(10L, otherUser))
+                .isInstanceOf(AccessDeniedException.class);
     }
 }

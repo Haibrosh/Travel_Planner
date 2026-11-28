@@ -14,10 +14,15 @@ import java.util.Date;
 @Service
 public class InviteTokenService {
 
-    private static final long INVITE_TOKEN_EXPIRATION_MS = 7L * 24 * 60 * 60 * 1000;
+    public static final long INVITE_TOKEN_EXPIRATION_SECONDS = 7L * 24 * 60 * 60;
+    private static final long INVITE_TOKEN_EXPIRATION_MS = INVITE_TOKEN_EXPIRATION_SECONDS * 1000L;
 
     @Value("${jwt.secret}")
     private String secretKey;
+
+    public String generateInviteToken(Long tripId) {
+        return generateInviteToken(tripId, InviteRole.COLLABORATOR.name());
+    }
 
     public String generateInviteToken(Long tripId, String role) {
         if (tripId == null) {
@@ -28,7 +33,7 @@ public class InviteTokenService {
         try {
             normalizedRole = InviteRole.valueOf(role == null ? "" : role.trim().toUpperCase()).name();
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invite role phải là EDITOR hoặc VIEWER.");
+            throw new IllegalArgumentException("Invite role phải là COLLABORATOR, EDITOR hoặc VIEWER.");
         }
 
         long now = System.currentTimeMillis();
@@ -47,6 +52,9 @@ public class InviteTokenService {
     }
 
     public InviteClaims decodeInviteToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Invite token không được để trống.");
+        }
         Claims claims = Jwts.parser()
                 .verifyWith(getSignInKey())
                 .build()
@@ -107,6 +115,7 @@ public class InviteTokenService {
     }
 
     public enum InviteRole {
+        COLLABORATOR,
         EDITOR,
         VIEWER
     }

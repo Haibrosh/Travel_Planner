@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.travel.planner.dto.ErrorResponse;
+import io.jsonwebtoken.MalformedJwtException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -216,6 +217,17 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.error").value("NullPointerException"));
     }
 
+    @Test
+    @DisplayName("13. JwtException -> 400 với { status, message, timestamp }")
+    void handleJwtException_returnsUnifiedErrorResponse() throws Exception {
+        mockMvc.perform(get("/test/jwt-error"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Token sai định dạng"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+
     @RestController
     static class DummyController {
 
@@ -267,6 +279,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/runtime-null")
         void runtimeNull() {
             throw new NullPointerException();
+        }
+
+        @GetMapping("/test/jwt-error")
+        void jwtError() {
+            throw new MalformedJwtException("Token sai định dạng");
         }
     }
 

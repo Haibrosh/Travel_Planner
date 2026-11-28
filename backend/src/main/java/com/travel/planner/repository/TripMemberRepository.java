@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,4 +61,20 @@ public interface TripMemberRepository extends JpaRepository<TripMember, TripMemb
 
     // Kiểm tra user có đang là thành viên ACTIVE trong chuyến đi không
     boolean existsByTrip_TripIdAndUser_UserIdAndStatus(Long tripId, Long userId, String status);
+
+    // Kiểm tra user có thuộc một trong các role hợp lệ và đang ở trạng thái chỉ định hay không
+    boolean existsByTrip_TripIdAndUser_UserIdAndRoleInAndStatus(
+            Long tripId,
+            Long userId,
+            Collection<String> roles,
+            String status
+    );
+
+    // Kiểm tra user có đúng role và trạng thái chỉ định trong chuyến đi hay không
+    boolean existsByTrip_TripIdAndUser_UserIdAndRoleAndStatus(
+            Long tripId,
+            Long userId,
+            String role,
+            String status
+    );
 }

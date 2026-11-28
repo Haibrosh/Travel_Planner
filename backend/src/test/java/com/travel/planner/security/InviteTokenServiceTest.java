@@ -51,6 +51,33 @@ class InviteTokenServiceTest {
     }
 
     @Test
+    void generateDefaultCollaboratorTokenAndDecode() {
+        long beforeGeneration = System.currentTimeMillis();
+        String token = inviteTokenService.generateInviteToken(42L);
+
+        InviteTokenService.InviteClaims claims = inviteTokenService.decodeInviteToken(token);
+
+        assertEquals(42L, claims.tripId());
+        assertEquals("COLLABORATOR", claims.role());
+
+        Date expiration = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(
+                        Decoders.BASE64.decode(
+                                "84518923c5837651a51187493a3848b61c15f91752b5757b32d20b601f2f8118")))
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getExpiration();
+        assertEquals(7L * 24 * 60 * 60 * 1000, expiration.getTime() - beforeGeneration, 1_000);
+    }
+
+    @Test
+    void rejectsBlankToken() {
+        assertThrows(IllegalArgumentException.class,
+                () -> inviteTokenService.decodeInviteToken("   "));
+    }
+
+    @Test
     void rejectsTamperedToken() {
         String token = inviteTokenService.generateInviteToken(42L, "VIEWER");
 
